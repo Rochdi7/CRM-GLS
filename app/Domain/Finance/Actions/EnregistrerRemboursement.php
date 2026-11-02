@@ -59,70 +59,7 @@ final class EnregistrerRemboursement
                     ->lockForUpdate()
                     ->firstOrFail();
 
-                if ($encaissement->student_id !== (int) $data['beneficiaire_id']) {
-                    throw ValidationException::withMessages([
-                        'encaissement_id' => __('This payment does not belong to the selected student.'),
-                    ]);
-                }
-
-                // ⚠ Jamais un remboursement sur un frais MASQUÉ (24/09/2026).
-                // Un frais masqué n'est plus dû et ne devrait porter aucun
-                // argent (le masquage libère le payé en avance) : un paiement
-                // encore posé dessus est une anomalie, et le rembourser
-                // ferait sortir de la caisse de l'argent qu'aucun écran ne
-                // montre (ENC-26191, 1 200 DH, remboursé par RMB-003 sur un
-                // frais masqué — invisible dans Encaissements, présent dans
-                // le relevé). On restaure le frais, ou on libère d'abord
-                // l'argent en avance ; l'avance, elle, se rembourse.
-                $fee = $encaissement->inscription_fee_id !== null
-                    ? InscriptionFee::query()->whereKey($encaissement->inscription_fee_id)->first()
-                    : null;
-
-                if ($fee !== null && $fee->estMasque()) {
-                    throw ValidationException::withMessages([
-                        'encaissement_id' => __('This payment sits on a hidden fee (« :frais »): restore the fee, or release its money as an advance first, before refunding it.', [
-                            'frais' => $fee->nom,
-                        ]),
-                    ]);
-                }
-
-                // An avance can only be refunded up to what is still
-                // unallocated — the applied part has already settled fees
-                // (and the refund itself then counts as "used", so the
-                // same money cannot be applied afterwards either).
-                if ($encaissement->isAvance() && round((float) $data['montant'], 2) > $encaissement->montantRestant()) {
-                    throw ValidationException::withMessages([
-                        'montant' => __("The amount cannot exceed the advance's remaining balance."),
-                    ]);
-                }
-
-                // A refund LINKED to an ordinary fee payment can never give
-                // back more than that payment brought in, cumulatively:
-                // without this, the same 1 000 DH row could be refunded
-                // 5 000 DH, twice over, and the till would go out by money it
-                // never received. Computed here, inside the transaction on
-                // the row already locked above, so two concurrent refunds
-                // serialize instead of both seeing the same remaining.
-                //
-                // ⚠ A refund with NO `encaissement_id` is still capped by no
-                // PAYMENT — that half of the documented decision stands
-                // (docs/rapports/finance/phase-10-finance-audit.md §2.6 Q1):
-                // an outflow unrelated to any tracked payment has no amount
-                // to cap against. What no longer holds is the other half —
-                // « the till may go negative » (10/09/2026): the balance
-                // guard below bounds EVERY refund by what the till actually
-                // holds, linked or not. Only the per-payment cap is what this
-                // block decides.
-                if (! $encaissement->isAvance()) {
-                    $dejaRembourse = (float) $encaissement->remboursements()->sum('montant');
-                    $restant = round(max(0.0, (float) $encaissement->montant - $dejaRembourse), 2);
-
-                    if (round((float) $data['montant'], 2) > $restant) {
-                        throw ValidationException::withMessages([
-                            'montant' => __("The amount cannot exceed the payment's refundable balance."),
-                        ]);
-                    }
-                }
+                $this->assertPaiementRemboursable($encaissement, (int) $data['beneficiaire_id'], (float) $data['montant']);
             }
 
             // The centre the refund BELONGS to, resolved ONCE and stored on
@@ -131,10 +68,12 @@ final class EnregistrerRemboursement
             // refunded from a centre-1 till was invisible on both centres,
             // and was refunded twice as a result). Identical precedence to
             // the ledger stamp below — they must never disagree.
-            $etablissementId = $encaissement?->etablissement_id
-                ?? Student::query()->whereKey((int) $data['beneficiaire_id'])->value('etablissement_id')
-                ?? $this->context->etablissementId()
-                ?? $agent->etablissement_id;
+            // An approved DEMANDE passes the centre it already stored (same
+            // rule, resolved when it was requested) — never re-derived from
+            // the approver's context. Form Requests never carry this key.
+            $etablissementId = isset($data['etablissement_id'])
+                ? (int) $data['etablissement_id']
+                : $this->centreDuRemboursement($encaissement, (int) $data['beneficiaire_id'], $agent);
 
             // Le solde est contrôlé DANS la transaction, sur la ligne
             // `caisses` verrouillée FOR UPDATE — le même verrou que
@@ -145,18 +84,20 @@ final class EnregistrerRemboursement
             // une caisse re-dérivée. Borne `montant <= solde` : vider un
             // tiroir jusqu'à 0,00 reste légitime.
             //
-            // ⚠ Le contrôle ne vaut que pour une caisse PHYSIQUE (Caissière /
-            // Externe). Un compte de MÉTHODE (TPE / Chèque / Virement) n'est
-            // pas un tiroir : c'est le compte du centre pour cette méthode, et
-            // le seul remboursement qui l'atteint est la contrepassation d'un
-            // chèque REJETÉ (CaisseResolver::forRemboursement). Cet argent
-            // n'a jamais existé — la banque l'a refusé — donc le compte peut
+            // ⚠ Le contrôle ne vaut PAS pour le compte « Chèque ». Le seul
+            // remboursement qui l'atteint est la contrepassation d'un chèque
+            // REJETÉ (CaisseResolver::forRemboursement) : cet argent n'a
+            // jamais existé — la banque l'a refusé — donc le compte peut
             // légitimement ne rien contenir au moment où on l'annule. Y
-            // appliquer la borne du tiroir bloquerait le remède même du
-            // chèque en bois, ce qui est l'inverse du but.
+            // appliquer la borne bloquerait le remède même du chèque en bois.
+            //
+            // Les comptes TPE / Virement, eux, SONT bornés depuis le
+            // 02/11/2026 : un super-admin peut y faire sortir un
+            // remboursement approuvé (ApprouverDemandeRemboursement), et ce
+            // compte ne peut pas rendre plus qu'il n'a reçu.
             $caisseADebiter = Caisse::query()->whereKey((int) $data['caisse_id'])->firstOrFail();
 
-            if ($caisseADebiter->isEspeces()) {
+            if ($caisseADebiter->type !== Caisse::TYPE_CHEQUE) {
                 $this->garde->verrouillerEtVerifier(
                     (int) $data['caisse_id'],
                     (float) $data['montant'],
@@ -196,5 +137,99 @@ final class EnregistrerRemboursement
 
             return $remboursement;
         });
+    }
+
+    /**
+     * Ce paiement peut-il être remboursé de `$montant` ? Même étudiant,
+     * frais non masqué, jamais au-delà de ce qui reste à rendre. Appelée sur
+     * la ligne `encaissements` déjà VERROUILLÉE, par cette action ET par
+     * DemanderRemboursement (02/11/2026) — qui passe en `$enAttente` les
+     * demandes déjà en attente sur ce paiement, pour qu'on ne puisse pas
+     * demander deux fois le même argent. Une seule définition : la demande ne
+     * peut pas accepter ce que l'approbation refusera.
+     */
+    public function assertPaiementRemboursable(Encaissement $encaissement, int $beneficiaireId, float $montant, float $enAttente = 0.0): void
+    {
+        if ($encaissement->student_id !== $beneficiaireId) {
+            throw ValidationException::withMessages([
+                'encaissement_id' => __('This payment does not belong to the selected student.'),
+            ]);
+        }
+
+        // ⚠ Jamais un remboursement sur un frais MASQUÉ (24/09/2026).
+        // Un frais masqué n'est plus dû et ne devrait porter aucun
+        // argent (le masquage libère le payé en avance) : un paiement
+        // encore posé dessus est une anomalie, et le rembourser
+        // ferait sortir de la caisse de l'argent qu'aucun écran ne
+        // montre (ENC-26191, 1 200 DH, remboursé par RMB-003 sur un
+        // frais masqué — invisible dans Encaissements, présent dans
+        // le relevé). On restaure le frais, ou on libère d'abord
+        // l'argent en avance ; l'avance, elle, se rembourse.
+        $fee = $encaissement->inscription_fee_id !== null
+            ? InscriptionFee::query()->whereKey($encaissement->inscription_fee_id)->first()
+            : null;
+
+        if ($fee !== null && $fee->estMasque()) {
+            throw ValidationException::withMessages([
+                'encaissement_id' => __('This payment sits on a hidden fee (« :frais »): restore the fee, or release its money as an advance first, before refunding it.', [
+                    'frais' => $fee->nom,
+                ]),
+            ]);
+        }
+
+        // An avance can only be refunded up to what is still
+        // unallocated — the applied part has already settled fees
+        // (and the refund itself then counts as "used", so the
+        // same money cannot be applied afterwards either).
+        if ($encaissement->isAvance() && round($montant, 2) > round($encaissement->montantRestant() - $enAttente, 2)) {
+            throw ValidationException::withMessages([
+                'montant' => __("The amount cannot exceed the advance's remaining balance."),
+            ]);
+        }
+
+        // A refund LINKED to an ordinary fee payment can never give
+        // back more than that payment brought in, cumulatively:
+        // without this, the same 1 000 DH row could be refunded
+        // 5 000 DH, twice over, and the till would go out by money it
+        // never received. Computed here, inside the transaction on
+        // the row already locked above, so two concurrent refunds
+        // serialize instead of both seeing the same remaining.
+        //
+        // ⚠ A refund with NO `encaissement_id` is still capped by no
+        // PAYMENT — that half of the documented decision stands
+        // (docs/rapports/finance/phase-10-finance-audit.md §2.6 Q1):
+        // an outflow unrelated to any tracked payment has no amount
+        // to cap against. What no longer holds is the other half —
+        // « the till may go negative » (10/09/2026): the balance
+        // guard below bounds EVERY refund by what the till actually
+        // holds, linked or not. Only the per-payment cap is what this
+        // block decides.
+        if (! $encaissement->isAvance()) {
+            $dejaRembourse = (float) $encaissement->remboursements()->sum('montant');
+            $restant = round(max(0.0, (float) $encaissement->montant - $dejaRembourse - $enAttente), 2);
+
+            if (round($montant, 2) > $restant) {
+                throw ValidationException::withMessages([
+                    'montant' => __("The amount cannot exceed the payment's refundable balance."),
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Le centre auquel un remboursement APPARTIENT : celui du paiement
+     * d'origine, sinon celui de l'étudiant, sinon le contexte actif, sinon le
+     * centre principal de l'agent. UNE définition, partagée par
+     * DemanderRemboursement — la demande et le remboursement qui en naît ne
+     * doivent jamais désigner deux centres différents.
+     */
+    public function centreDuRemboursement(?Encaissement $encaissement, int $beneficiaireId, Employee $agent): ?int
+    {
+        $id = $encaissement?->etablissement_id
+            ?? Student::query()->whereKey($beneficiaireId)->value('etablissement_id')
+            ?? $this->context->etablissementId()
+            ?? $agent->etablissement_id;
+
+        return $id === null ? null : (int) $id;
     }
 }

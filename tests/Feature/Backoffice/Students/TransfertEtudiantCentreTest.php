@@ -565,6 +565,8 @@ final class TransfertEtudiantCentreTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->where('absences.total', 3)
                 ->has('absences.absences', 2)
+                // Les présences sont LISTÉES aussi, pas seulement comptées.
+                ->has('absences.appels', 3)
                 ->where('absences.compteurs.Présent', 1)
                 ->where('absences.compteurs.Absent', 1)
                 ->where('absences.compteurs.Justifié', 1));

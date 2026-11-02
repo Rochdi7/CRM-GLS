@@ -5,15 +5,12 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Backoffice;
 
 use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
-use App\Domain\Expenses\Queries\GetTypesDepensesList;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\TypesDepenses\StoreTypeDepenseRequest;
 use App\Http\Requests\Backoffice\TypesDepenses\UpdateTypeDepenseRequest;
 use App\Models\TypeDepense;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Inertia\Inertia;
-use Inertia\Response;
 
 /**
  * Types de dépenses (expense types) CRUD — Inertia/React (Phase 6). Was
@@ -24,6 +21,11 @@ use Inertia\Response;
  * viable. `backoffice.depenses.index?tab=types` used to render this
  * inline; the tab itself is now removed there (2-tab page) and any old
  * deep-link redirects here instead.
+ *
+ * ⚠ Since 02/11/2026 the LIST lives in Paramètres (tab `types-depenses`,
+ * SettingController + Settings/TypesDepensesPanel.tsx). index() only
+ * redirects there, keeping the old URL and route name alive; the mutations
+ * below stay here and land back on that tab.
  *
  * is_system rows are LOCKED (schema §12: payroll/transfer code depends on
  * their exact names) — guarded by an explicit, unconditional check BEFORE
@@ -40,19 +42,13 @@ final class TypeDepenseController extends Controller
         $this->authorizeResource(TypeDepense::class, 'types_depense');
     }
 
-    public function index(Request $request, GetTypesDepensesList $getTypesDepensesList): Response
+    public function index(Request $request): RedirectResponse
     {
-        $search = (string) $request->query('search', '');
-        $perPage = (int) $request->query('per_page', 10);
-
-        return Inertia::render('Backoffice/TypesDepenses/Index', [
-            'types' => $getTypesDepensesList($search, in_array($perPage, [10, 25, 50, 100], true) ? $perPage : 10),
-            'filters' => ['search' => $search],
-            'permissions' => [
-                'create' => $request->user()->can('create', TypeDepense::class),
-                'update' => $request->user()->can('expense-types.update'),
-                'delete' => $request->user()->can('expense-types.delete'),
-            ],
+        // authorizeResource() already checked `expense-types.view`, so a
+        // user without it still gets 403 here rather than a redirect.
+        return redirect()->route('backoffice.settings', [
+            'tab' => 'types-depenses',
+            ...$request->only(['search', 'per_page', 'page']),
         ]);
     }
 
@@ -64,7 +60,7 @@ final class TypeDepenseController extends Controller
             'is_system' => false,
         ]);
 
-        return $this->backToListPreservingFilters($request, 'backoffice.types-depenses.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.settings', ['tab' => 'types-depenses'])
             ->with('success', __('Type de dépense créé.'));
     }
 
@@ -78,7 +74,7 @@ final class TypeDepenseController extends Controller
 
         $types_depense->update($request->validated());
 
-        return $this->backToListPreservingFilters($request, 'backoffice.types-depenses.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.settings', ['tab' => 'types-depenses'])
             ->with('success', __('Type de dépense mis à jour.'));
     }
 
@@ -95,7 +91,7 @@ final class TypeDepenseController extends Controller
 
         $types_depense->delete();
 
-        return $this->backToListPreservingFilters($request, 'backoffice.types-depenses.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.settings', ['tab' => 'types-depenses'])
             ->with('success', __('Type de dépense supprimé.'));
     }
 }

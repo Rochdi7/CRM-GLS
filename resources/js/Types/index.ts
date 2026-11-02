@@ -989,7 +989,7 @@ export interface CrudPermissions {
 
 // --- Phase 6: simple CRUD modules ------------------------------------------
 
-export type SettingsTab = 'etablissements' | 'annees-scolaires' | 'salles' | 'frais' | 'banques' | 'motifs-annulation' | 'systeme';
+export type SettingsTab = 'etablissements' | 'annees-scolaires' | 'salles' | 'frais' | 'banques' | 'motifs-annulation' | 'types-depenses' | 'systeme';
 
 export interface EtablissementRow {
     id: number;
@@ -1143,15 +1143,11 @@ export interface SettingsPageProps {
     frais?: PaginatedData<FraisRow>;
     banques?: PaginatedData<BanqueRow>;
     motifsAnnulation?: PaginatedData<MotifAnnulationRow>;
+    /** Types de dépenses tab (02/11/2026 — formerly its own page). */
+    typesDepenses?: PaginatedData<TypeDepenseRow>;
+    typesDepensesFilters?: { search: string };
     /** Système tab: application-wide switches (AppSettings). */
-    systeme?: { expenseApproval: boolean };
-    [key: string]: unknown;
-}
-
-export interface TypesDepensesPageProps {
-    types: PaginatedData<TypeDepenseRow>;
-    filters: { search: string };
-    permissions: CrudPermissions;
+    systeme?: { expenseApproval: boolean; refundApproval: boolean };
     [key: string]: unknown;
 }
 
@@ -1408,19 +1404,24 @@ export interface StudentRow {
 }
 
 /** Onglet « Absences » (fiche étudiant / fiche inscription) — GetAbsencesEtudiant. */
+export interface AppelEtudiant {
+    id: number;
+    seanceId: number;
+    date: string;
+    heure: string | null;
+    groupe: string | null;
+    enseignant: string | null;
+    statut: string;
+    note: string | null;
+}
+
 export interface AbsencesEtudiant {
     total: number;
     compteurs: Record<string, number>;
-    absences: Array<{
-        id: number;
-        seanceId: number;
-        date: string;
-        heure: string | null;
-        groupe: string | null;
-        enseignant: string | null;
-        statut: string;
-        note: string | null;
-    }>;
+    /** Tous les appels, présences comprises. */
+    appels: AppelEtudiant[];
+    /** Sous-ensemble Absent / Justifié, filtré par le serveur. */
+    absences: AppelEtudiant[];
 }
 
 /** Historique d'un centre précédent, affiché sur la fiche d'arrivée (GetStudentDetails::historiqueTransfert). */
@@ -2834,6 +2835,8 @@ export interface DepensesFilters {
     dateFrom: string;
     dateTo: string;
     statutFilter: string;
+    /** Statut des demandes de remboursement listées — vide = toutes (l'onglet est aussi l'historique). */
+    demandeStatut: string;
     perPage: number;
 }
 
@@ -2850,8 +2853,37 @@ export interface RemboursementRow {
     motif: string | null;
     note: string | null;
     agent: string | null;
+    /** Lue sur le compte débité : Espèces (tiroir), TPE / Virement (compte du centre), Chèque (reprise d'un chèque rejeté). */
+    methode: string;
     /** Annulé par écriture compensatoire : la caisse a été recréditée, donc plus aucune sortie d'argent. */
     annule: boolean;
+}
+
+/** One refund REQUEST (02/11/2026) — mirrors GetDemandesRemboursementList's ->through() mapping. */
+export interface DemandeRemboursementRow {
+    id: number;
+    reference: string;
+    beneficiaire: string | null;
+    beneficiaireId: number;
+    encaissementId: number | null;
+    encaissementReference: string | null;
+    montant: MoneyDisplay;
+    motif: string | null;
+    note: string | null;
+    statut: string;
+    /** Chosen at approval; null while pending or refused. */
+    methode: string | null;
+    centre: string | null;
+    demandePar: string | null;
+    demandeLe: string | null;
+    decidePar: string | null;
+    decideLe: string | null;
+    motifRefus: string | null;
+    remboursementReference: string | null;
+    /** The linked payment came from a REJECTED cheque: approval reverses the Chèque account, cash only. */
+    chequeRejete: boolean;
+    /** Server-computed (policy `approve`) — UI convenience only. */
+    canDecide: boolean;
 }
 
 /** A cash till the refund form may draw from, with its responsable's name and current balance. */
@@ -2950,6 +2982,17 @@ export interface DepensesPageProps {
     canChooseRemboursementCaisse: boolean;
     /** La caisse débitée quand l'utilisateur ne choisit pas — affichée en lecture seule. */
     remboursementCaisseParDefaut: RemboursementCaisseOption | null;
+    /** Paramètres → Système « Validation des remboursements » — ON: « Ajouter » creates a REQUEST, nothing is debited. */
+    refundApprovalEnabled: boolean;
+    demandesRemboursement: PaginatedData<DemandeRemboursementRow> | null;
+    /** Pending requests in scope, outside search/statut filters — the tab badge. */
+    demandesRemboursementEnAttente: { count: number; montant: MoneyDisplay } | null;
+    demandeRemboursementStatuts: string[];
+    demandeRemboursementMethodes: string[];
+    /** `refunds.approve` (director + super-admin) — UI convenience; the policy is the real gate. */
+    canApproveRemboursement: boolean;
+    /** `refunds.choose-method` (super-admin) — TPE / Virement at approval. */
+    canChooseRemboursementMethode: boolean;
     /** Paramètres → Système « Validation des dépenses » — drives the whole approval UI. */
     approvalEnabled: boolean;
     /** UI convenience only (`expenses.approve`); the policy is the real gate. */

@@ -15,6 +15,7 @@ use App\Models\InscriptionFee;
 use App\Models\Remboursement;
 use App\Models\Student;
 use App\Models\User;
+use App\Support\Settings\AppSettings;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -38,6 +39,9 @@ final class RemboursementsInertiaCrudTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // These tests record a refund DIRECTLY (till debited on submit) —
+        // the request/approval flow is DemandeRemboursementTest.
+        AppSettings::setBool(AppSettings::REFUND_APPROVAL, false);
         $this->seed(RolesAndPermissionsSeeder::class);
         $this->centre = Etablissement::factory()->create();
     }

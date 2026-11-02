@@ -246,6 +246,18 @@ keep the roles from drifting apart:
   physiquement en main — sa propre caisse, dérivée au serveur. Un `caisse_id`
   étranger soumis sans le droit est refusé (422) et la liste des caisses ne
   lui est même pas servie. Voir CLAUDE.md §11.
+  Ce choix ne vaut plus que lorsque « Validation des remboursements » est
+  DÉSACTIVÉE : une demande ne nomme aucune caisse (paragraphe suivant).
+  ⚠ **Demandes de remboursement (02/11/2026).** Avec « Validation des
+  remboursements » active (Paramètres → Système, défaut), `refunds.create`
+  crée une DEMANDE qui ne débite rien. `refunds.approve` (approuver /
+  refuser) est porté par le SEUL preset `director` (+ le bypass
+  super-admin), borné aux centres affectés (`DemandeRemboursementPolicy`).
+  Un directeur approuve toujours en **Espèces** — l'argent sort de la caisse
+  de l'employé qui a fait la demande. `refunds.choose-method` (TPE /
+  Virement : l'argent sort du compte de cette méthode du centre de la
+  demande) est dans `superAdminOnly()`. Une méthode autre qu'Espèces soumise
+  sans ce droit est refusée (422).
 
 - **`$financeReadOnly`** — read access to every finance screen, the baseline
   the accounting/oversight roles build on.

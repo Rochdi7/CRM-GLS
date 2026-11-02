@@ -18,6 +18,7 @@ use App\Models\InscriptionFee;
 use App\Models\Remboursement;
 use App\Models\Student;
 use App\Models\User;
+use App\Support\Settings\AppSettings;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -48,6 +49,9 @@ final class RefundAvanceVisibilityTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // These tests record a refund DIRECTLY (till debited on submit) —
+        // the request/approval flow is DemandeRemboursementTest.
+        AppSettings::setBool(AppSettings::REFUND_APPROVAL, false);
         $this->seed(RolesAndPermissionsSeeder::class);
         $this->annee = AnneeScolaire::create([
             'nom' => '2025/2026', 'date_debut' => '2025-09-01', 'date_fin' => '2026-08-31',

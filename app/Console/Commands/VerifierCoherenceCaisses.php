@@ -9,6 +9,7 @@ use App\Models\Activity;
 use App\Models\Caisse;
 use App\Models\CaisseTransfer;
 use App\Models\Cheque;
+use App\Models\DemandeRemboursement;
 use App\Models\Depense;
 use App\Models\Employee;
 use App\Models\Encaissement;
@@ -161,8 +162,19 @@ final class VerifierCoherenceCaisses extends Command
         // reverses the Chèque account too.
         $chequesOrigine = ChequeOrigine::pour($remboursements->pluck('encaissement_id')->filter()->map(fn ($id) => (int) $id)->all());
 
+        // Depuis le 02/11/2026 un super-admin peut APPROUVER une demande de
+        // remboursement en TPE / Virement : l'argent sort alors légitimement
+        // du compte de cette méthode du centre de la demande. Lu sur la
+        // demande elle-même (méthode + centre), jamais supposé.
+        $approuvesParMethode = DemandeRemboursement::query()
+            ->where('statut', DemandeRemboursement::STATUT_APPROUVEE)
+            ->whereIn('methode', [Caisse::TYPE_TPE, Caisse::TYPE_VIREMENT])
+            ->whereIn('remboursement_id', $remboursements->pluck('id'))
+            ->get(['remboursement_id', 'methode', 'etablissement_id'])
+            ->keyBy('remboursement_id');
+
         $remboursements
-            ->each(function (Remboursement $r) use (&$rows, $chequesOrigine): void {
+            ->each(function (Remboursement $r) use (&$rows, $chequesOrigine, $approuvesParMethode): void {
                 $legit = $r->encaissement !== null
                     && ($chequesOrigine[(int) $r->encaissement_id] ?? null)?->statut === Cheque::STATUT_REJETE
                     && (int) $r->encaissement->caisse_id === (int) $r->caisse_id;
@@ -171,13 +183,21 @@ final class VerifierCoherenceCaisses extends Command
                     return; // CaisseResolver::forRemboursement()'s one exception.
                 }
 
+                $demande = $approuvesParMethode->get($r->id);
+
+                if ($demande !== null
+                    && $r->caisse?->type === $demande->methode
+                    && (int) $r->caisse->etablissement_id === (int) $demande->etablissement_id) {
+                    return; // ApprouverDemandeRemboursement, méthode choisie par un super-admin.
+                }
+
                 $rows[] = [
                     'Table' => 'remboursements',
                     'Référence' => $r->reference,
                     'Montant' => $this->money($r->montant),
                     'Statut' => '-',
                     'Caisse' => (string) ($r->caisse?->nom ?? '-'),
-                    'Raison' => 'Un remboursement se règle depuis la caisse physique (sauf reprise d\'un chèque rejeté).',
+                    'Raison' => 'Un remboursement se règle depuis la caisse physique (sauf reprise d\'un chèque rejeté, ou demande approuvée en TPE / virement).',
                 ];
             });
 

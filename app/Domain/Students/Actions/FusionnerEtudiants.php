@@ -6,6 +6,7 @@ namespace App\Domain\Students\Actions;
 
 use App\Domain\Students\Support\FicheEtudiantVide;
 use App\Models\Cheque;
+use App\Models\DemandeRemboursement;
 use App\Models\Encaissement;
 use App\Models\Inscription;
 use App\Models\InscriptionHistorique;
@@ -59,6 +60,9 @@ final class FusionnerEtudiants
         [Presence::class, 'student_id'],
         [InscriptionHistorique::class, 'student_id'],
         [Remboursement::class, 'beneficiaire_id'],
+        // Demande de remboursement (02/11/2026) : suit la personne, comme le
+        // remboursement qu'elle deviendra.
+        [DemandeRemboursement::class, 'beneficiaire_id'],
         // Demande de virement (07/10/2026) : comme un paiement, elle suit la
         // personne. Oubliée, elle bloquait la suppression d'une fiche vide
         // et restait orpheline sur une fiche « (doublon fusionné) ».

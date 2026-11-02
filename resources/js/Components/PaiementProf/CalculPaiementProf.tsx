@@ -6,20 +6,9 @@ import SelectField from '@/Components/Forms/SelectField';
 import FormField from '@/Components/Forms/FormField';
 import { t } from '@/Lib/i18n';
 import { formatDuree, parseDuree } from '@/Lib/duree';
+import { statutGridFill } from '@/Lib/inscriptionStatut';
 import type { PaiementProfCalcul, PaiementProfFilters, PaiementProfGroupOptions, SelectOption } from '@/Types';
 
-/**
- * Couleur de la cellule « Étudiant » selon le statut du dossier — la MÊME
- * répartition que « Absence par groupe » (Seances/AbsenceParGroupe.tsx
- * ROW_CLASS) : rien tant que l'inscription est Active, rouge pour une
- * annulation, gris pour tout autre dossier clos ou sans inscription.
- */
-function classeNom(statut: string | null): string {
-    if (statut === 'Active') return '';
-    if (statut === 'Annulée') return 'pp-annulee';
-
-    return 'pp-clos';
-}
 
 /** Libellé du palier atteint par une ligne (0, 1, 2 ou 4 semaines). */
 function libellePalier(semaines: number): string {
@@ -577,12 +566,6 @@ export default function CalculPaiementProf({
                 .pp-wrap tbody tr:hover td.pp-num,
                 .pp-wrap tbody tr:hover td.pp-nom,
                 .pp-wrap tbody tr:hover td.pp-total { background: var(--pp-hover-bg); }
-                /* Dossiers clos : mêmes couleurs que « Absence par groupe »
-                   (gris = changement / expirée / archivée, rouge = annulée). */
-                .pp-wrap tbody td.pp-nom.pp-clos,
-                .pp-wrap tbody tr:hover td.pp-nom.pp-clos { background: rgb(170, 170, 170); color: #1a1a1a; }
-                .pp-wrap tbody td.pp-nom.pp-annulee,
-                .pp-wrap tbody tr:hover td.pp-nom.pp-annulee { background: rgb(246, 45, 81); color: #fff; }
                 .pp-wrap tfoot td { position: sticky; bottom: 0; z-index: 9;
                                     background: var(--pp-head-bg); font-weight: 600;
                                     border-top: 1px solid var(--bs-border-color); }
@@ -1334,7 +1317,11 @@ export default function CalculPaiementProf({
                                             <tr key={ligne.studentId}>
                                                 <td className="pp-num text-center text-muted">{index + 1}</td>
                                                 <td
-                                                    className={`pp-nom fw-semibold ps-2 ${classeNom(ligne.inscriptionStatut)}`}
+                                                    className="pp-nom fw-semibold ps-2"
+                                                    // Dossier clos : la MÊME palette que « Statistique de
+                                                    // groupe » et « Absence par groupe » (statutGridFill) —
+                                                    // inline, donc elle tient aussi au survol de la ligne.
+                                                    style={statutGridFill(ligne.inscriptionStatut)}
                                                     title={
                                                         ligne.inscriptionStatut === 'Active'
                                                             ? undefined

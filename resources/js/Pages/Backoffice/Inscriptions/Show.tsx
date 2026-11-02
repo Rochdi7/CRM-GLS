@@ -77,8 +77,8 @@ export default function InscriptionShow({ inscription, absences }: InscriptionSh
                         className={`nav-link rounded${tab === 'absences' ? ' active' : ''}`}
                         onClick={() => setTab('absences')}
                     >
-                        <i className="ti ti-calendar-x me-1" />
-                        Absences ({absences.absences.length})
+                        <i className="ti ti-calendar-check me-1" />
+                        Présences ({absences.total})
                     </button>
                 </li>
             </ul>
@@ -86,7 +86,7 @@ export default function InscriptionShow({ inscription, absences }: InscriptionSh
             {tab === 'absences' && (
                 <AbsencesPanel
                     data={absences}
-                    scope={`Absences de ${inscription.student ? enCapitales(inscription.student) : "l'étudiant"} dans le groupe ${inscription.groupe ?? '-'} (séances de ce dossier uniquement).`}
+                    scope={`Appels de ${inscription.student ? enCapitales(inscription.student) : "l'étudiant"} dans le groupe ${inscription.groupe ?? '-'} (séances de ce dossier uniquement).`}
                 />
             )}
 

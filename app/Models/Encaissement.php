@@ -254,4 +254,14 @@ class Encaissement extends Model
     {
         return $this->hasMany(Remboursement::class);
     }
+
+    /**
+     * Les DEMANDES de remboursement de ce paiement (02/11/2026) — hors
+     * ledger : seule une demande approuvée devient un remboursement. Ne
+     * jamais les additionner comme de l'argent sorti.
+     */
+    public function demandesRemboursement(): HasMany
+    {
+        return $this->hasMany(DemandeRemboursement::class);
+    }
 }

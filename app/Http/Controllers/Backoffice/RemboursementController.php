@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Backoffice;
 
 use App\Domain\Finance\Actions\AnnulerRemboursement;
+use App\Domain\Finance\Actions\DemanderRemboursement;
 use App\Domain\Finance\Actions\EnregistrerRemboursement;
 use App\Domain\Finance\Support\CaisseResolver;
 use App\Domain\Finance\Queries\GetStudentPaymentsForRefund;
@@ -17,6 +18,7 @@ use App\Models\Encaissement;
 use App\Models\Remboursement;
 use App\Models\Student;
 use App\Services\Authorization\CenterAccessService;
+use App\Support\Settings\AppSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -73,6 +75,22 @@ final class RemboursementController extends Controller
         // till — the linked payment (if any) is checked by the action to
         // belong to that same student, so this one check covers both.
         $this->assertStudentInContext($request, Student::query()->findOrFail((int) $data['beneficiaire_id']), 'beneficiaire_id');
+
+        // « Validation des remboursements » (02/11/2026, ON par défaut) : la
+        // soumission est une DEMANDE — aucune caisse ne bouge. Le compte
+        // débité se décide à l'approbation (ApprouverDemandeRemboursement),
+        // par un directeur de ce centre ou un super-admin.
+        if (AppSettings::refundApprovalEnabled()) {
+            // Résolu dans le conteneur ICI, pas en paramètre : la branche
+            // directe ci-dessous reste exactement ce qu'elle était.
+            app(DemanderRemboursement::class)->handle($data, $agent);
+
+            return $this->backToListPreservingFilters(
+                $request,
+                'backoffice.depenses.index',
+                ['tab' => 'demandes-remboursement'],
+            )->with('success', __('Refund request sent: a director or a super-admin must approve it before any money leaves the till.'));
+        }
 
         $encaissement = ! empty($data['encaissement_id'])
             ? Encaissement::query()->with(['cheque', 'caisse'])->find((int) $data['encaissement_id'])

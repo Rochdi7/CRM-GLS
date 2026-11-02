@@ -224,8 +224,8 @@ export const backofficeNavigation: NavGroup[] = [
                 label: t('Settings'),
                 href: '/backoffice/settings',
                 icon: 'ti ti-settings',
-                permissions: ['centers.view', 'academic-years.view', 'rooms.view', 'fees.view'],
-                matchPaths: ['/backoffice/settings'],
+                permissions: ['centers.view', 'academic-years.view', 'rooms.view', 'fees.view', 'expense-types.view'],
+                matchPaths: ['/backoffice/settings', '/backoffice/types-depenses'],
                 inertia: true,
             },
             {

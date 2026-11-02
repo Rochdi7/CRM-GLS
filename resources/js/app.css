@@ -1913,30 +1913,12 @@ html[data-theme='dark'] .gls-payment-matrix > :not(caption) > * > * {
     background-color: #9aa1a9;
     color: #f2f4f6;
 }
-/* A student whose inscription is no longer Active: kept in the matrix (past
-   attendance is history) but flagged on the NAME cell only.
-
-   The two fills are the SAME ones « Détails paiement » uses for its own rows
-   (Components/Groups/GroupPaymentMatrix.tsx ROW_FILL), so a group reads
-   identically on both screens: grey = the enrollment moved on (Changement,
-   Expirée, Archivée), red = it was cancelled. Before 03/09/2026 every closed
-   statut was painted red here, which both disagreed with Détails paiement and
-   made a whole column of archived names look like a wall of absences next to
-   the red « A » cells. */
-.gls-absence-matrix .gls-absence-clos .gls-absence-student {
-    background-color: rgb(170, 170, 170);
-    color: #1a1a1a;
-}
-.gls-absence-matrix .gls-absence-clos .gls-absence-student a {
-    color: #1a1a1a;
-}
-.gls-absence-matrix .gls-absence-annulee .gls-absence-student {
-    background-color: rgb(246, 45, 81);
-    color: #fff;
-}
-.gls-absence-matrix .gls-absence-annulee .gls-absence-student a {
-    color: #fff;
-}
+/* A student whose inscription is no longer Active stays in the matrix (past
+   attendance is history) and is flagged on the NAME cell only. The fill is
+   set inline from Lib/inscriptionStatut statutGridFill — the SAME palette as
+   « Statistique de groupe » and « Paiement prof » (red Annulée, light blue
+   Changement, orange Transférée, grey the rest). The link inherits the
+   cell's text colour (text-reset). */
 
 /*
  * ---------------------------------------------------------------------------
@@ -2188,6 +2170,9 @@ h1, .h1, h2, .h2, h3, .h3, h4, .h4, h5, .h5, h6, .h6 {
 .badge.badge-soft-warning { background: rgba(234, 179, 0, 0.2); color: #8a6a00; }
 .badge.badge-soft-info    { background: rgba(15, 101, 205, 0.16); }
 .badge.badge-soft-dark    { background: rgba(32, 44, 75, 0.14); }
+/* Orange = inscription « Transférée » (Lib/inscriptionStatut, 02/11/2026) :
+ * le thème n'a pas de variante orange, elle est posée ici. */
+.badge.badge-soft-orange  { background: rgba(253, 126, 20, 0.16); color: #b85600; }
 
 /* `badge-warning` plein : jaune #EAB300 sous du blanc = 1,88:1, le pire
  * contraste du thème. Le TEXTE passe en foncé, le fond ne bouge pas — un
@@ -3999,6 +3984,7 @@ html[data-theme='dark'] .badge.badge-soft-danger    { color: #ff7d92; }
 html[data-theme='dark'] .badge.badge-soft-warning   { color: #f3c95a; }
 html[data-theme='dark'] .badge.badge-soft-secondary { color: #d2d0da; }
 html[data-theme='dark'] .badge.badge-soft-dark      { color: #d2d0da; }
+html[data-theme='dark'] .badge.badge-soft-orange    { color: #ffa45c; }
 
 /* Les liens de tableau restent bleus — c'est ce qui signale qu'ils sont
  * cliquables ; les noircir les rendrait indistinguables du texte. */
@@ -5136,7 +5122,7 @@ html[data-theme='dark'] .gls-welcome-box {
  * groupe ; le cadre passe en primaire quand c'est la période qui est
  * affichée, comme le bouton actif. */
 .gls-duree-dates .form-control {
-    width: 118px;
+    width: 130px;
     min-height: 0;
     height: calc(1.5em + 0.5rem + 2px);
     padding: 0.25rem 2rem 0.25rem 0.5rem;
@@ -5177,7 +5163,7 @@ html[data-theme='dark'] .gls-welcome-box {
         flex-wrap: wrap;
     }
     .gls-duree-dates .form-control {
-        width: 110px;
+        width: 126px;
     }
 }
 

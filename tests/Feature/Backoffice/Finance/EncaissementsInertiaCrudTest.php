@@ -17,6 +17,7 @@ use App\Models\Remboursement;
 use App\Models\Student;
 use App\Models\User;
 use App\Services\Context\CurrentContext;
+use App\Support\Settings\AppSettings;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Inertia;
@@ -40,6 +41,9 @@ final class EncaissementsInertiaCrudTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // These tests record a refund DIRECTLY (till debited on submit) —
+        // the request/approval flow is DemandeRemboursementTest.
+        AppSettings::setBool(AppSettings::REFUND_APPROVAL, false);
         // Les avances de ce fichier sont datees du 20-21/09/2025 : on se place
         // dans leur delai de validite (14 jours, ValiditeAvance), sinon
         // chacune serait refusee comme expiree avant meme la regle testee.

@@ -7,6 +7,7 @@ namespace App\Http\Requests\Backoffice\Remboursements;
 use App\Domain\Finance\Support\CaisseResolver;
 use App\Models\Caisse;
 use App\Rules\AccessibleCaisse;
+use App\Support\Settings\AppSettings;
 use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -31,6 +32,23 @@ final class StoreRemboursementRequest extends FormRequest
      */
     public function rules(): array
     {
+        // « Validation des remboursements » ON (02/11/2026, défaut) : la
+        // soumission est une DEMANDE. Ni caisse ni date — la caisse se
+        // décide à l'approbation (méthode choisie), et la date est celle où
+        // l'argent sort. Une caisse SOUMISE est refusée, jamais ignorée en
+        // silence : l'écran laisserait croire que ce tiroir sera débité.
+        if (AppSettings::refundApprovalEnabled()) {
+            return [
+                'beneficiaire_id' => ['required', 'exists:students,id'],
+                'encaissement_id' => ['nullable', 'exists:encaissements,id'],
+                'caisse_id' => ['prohibited'],
+                'montant' => ['required', 'numeric', 'min:0.01'],
+                'date_remboursement' => ['nullable', 'date'],
+                'motif' => ['nullable', 'string', 'max:255'],
+                'note' => ['nullable', 'string'],
+            ];
+        }
+
         return [
             'beneficiaire_id' => ['required', 'exists:students,id'],
             // Optional: picking one of the student's listed payments links

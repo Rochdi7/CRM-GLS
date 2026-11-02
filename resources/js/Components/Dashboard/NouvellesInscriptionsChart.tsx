@@ -97,9 +97,21 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
     const [debut, setDebut] = useState(data.debut ?? '');
     const [fin, setFin] = useState(data.fin ?? '');
     const periodeActive = data.duree === 'periode';
+    // Typing « 20-09-2025 » over « 20-11-2026 » passes through VALID dates
+    // (« 20-01-2026 » after the first month digit): reloading on each of them
+    // fired a request per keystroke, and the pickers were disabled while it
+    // ran, so focus dropped and the rest of the date was lost (02/11/2026).
+    // The reload now waits for the user to stop, and a picker the user has
+    // touched since is never overwritten by the server's echo.
+    const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const editing = useRef(false);
+
+    useEffect(() => () => {
+        if (reloadTimer.current) clearTimeout(reloadTimer.current);
+    }, []);
 
     useEffect(() => {
-        if (data.duree === 'periode') {
+        if (data.duree === 'periode' && !editing.current) {
             setDebut(data.debut ?? '');
             setFin(data.fin ?? '');
         }
@@ -107,6 +119,8 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
 
     function choosePreset(value: NouvellesInscriptionsDuree) {
         if (value === data.duree) return;
+        if (reloadTimer.current) clearTimeout(reloadTimer.current);
+        editing.current = false;
         setDebut('');
         setFin('');
         onDureeChange(value);
@@ -115,10 +129,15 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
     function choosePeriode(nextDebut: string, nextFin: string) {
         setDebut(nextDebut);
         setFin(nextFin);
+        editing.current = true;
+        if (reloadTimer.current) clearTimeout(reloadTimer.current);
         // Reload only once the pair is complete and ordered — half a window
         // is not a window, and the server would fall back to today anyway.
         if (nextDebut && nextFin && nextDebut <= nextFin && (nextDebut !== data.debut || nextFin !== data.fin)) {
-            onDureeChange('periode', nextDebut, nextFin);
+            reloadTimer.current = setTimeout(() => {
+                editing.current = false;
+                onDureeChange('periode', nextDebut, nextFin);
+            }, 600);
         }
     }
     const periodeInverse = debut !== '' && fin !== '' && debut > fin;
@@ -242,7 +261,6 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
                         <DateField
                             id="insc-periode-debut"
                             value={debut}
-                            disabled={loading}
                             panelAlign="right"
                             onChange={(e) => choosePeriode(e.target.value, fin)}
                         />
@@ -250,7 +268,6 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
                         <DateField
                             id="insc-periode-fin"
                             value={fin}
-                            disabled={loading}
                             panelAlign="right"
                             onChange={(e) => choosePeriode(debut, e.target.value)}
                         />

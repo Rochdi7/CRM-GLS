@@ -1,4 +1,4 @@
-import { Link, router, useForm, usePage } from '@inertiajs/react';
+import { router, useForm, usePage } from '@inertiajs/react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
@@ -19,6 +19,7 @@ import TextareaField from '@/Components/Forms/TextareaField';
 import TagsInput from '@/Components/Forms/TagsInput';
 import FormActions from '@/Components/Forms/FormActions';
 import CheckboxField from '@/Components/Forms/CheckboxField';
+import DemandesRemboursementPanel from '@/Components/Remboursements/DemandesRemboursementPanel';
 import CalculPaiementProf, {
     type PaiementProfCalculParams,
     type PaiementProfPrefill,
@@ -26,9 +27,9 @@ import CalculPaiementProf, {
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import { useFilterReset } from '@/Hooks/useFilterReset';
 import { t } from '@/Lib/i18n';
-import type { DepenseRow, DepensesPageProps, EncaissementFormOption, RemboursementCaisseOption, RemboursementRow, SelectOption, SharedProps } from '@/Types';
+import type { DemandeRemboursementRow, DepenseRow, DepensesPageProps, EncaissementFormOption, RemboursementCaisseOption, RemboursementRow, SelectOption, SharedProps } from '@/Types';
 
-type Tab = 'depenses' | 'paiements-prof' | 'remboursements' | 'validation';
+type Tab = 'depenses' | 'paiements-prof' | 'remboursements' | 'demandes-remboursement' | 'validation';
 
 interface DepenseFormState {
     type_depense_id: number | '';
@@ -197,6 +198,12 @@ export default function DepensesIndex({
     remboursementCaisses,
     canChooseRemboursementCaisse,
     remboursementCaisseParDefaut,
+    refundApprovalEnabled,
+    demandesRemboursement,
+    demandesRemboursementEnAttente,
+    demandeRemboursementStatuts,
+    demandeRemboursementMethodes,
+    canChooseRemboursementMethode,
     students,
     approvalEnabled,
     canApprove,
@@ -214,12 +221,16 @@ export default function DepensesIndex({
     paliersPaie,
 }: DepensesPageProps) {
     const isLoading = useInertiaLoading();
-    // The Types de dépenses tab links to its own page — UI-gate it like the
-    // sidebar does (server enforcement unchanged).
-    const { auth, context } = usePage<SharedProps>().props;
-    const canViewTypes = auth.isSuperAdmin || auth.permissions.includes('expense-types.view');
+    const { context } = usePage<SharedProps>().props;
     const requestedTab = new URLSearchParams(window.location.search).get('tab');
-    const initialTab: Tab = requestedTab === 'remboursements' && canViewRemboursements
+    // « Demandes de remboursement » a son propre onglet (02/11/2026) : affiché
+    // tant que la validation est active, ET tant qu'il reste des demandes en
+    // attente après l'avoir coupée — couper l'interrupteur ne libère rien.
+    const showDemandesTab = canViewRemboursements && demandesRemboursement !== null
+        && (refundApprovalEnabled || (demandesRemboursementEnAttente?.count ?? 0) > 0);
+    const initialTab: Tab = requestedTab === 'demandes-remboursement' && showDemandesTab
+        ? 'demandes-remboursement'
+        : requestedTab === 'remboursements' && canViewRemboursements
         ? 'remboursements'
         : requestedTab === 'paiements-prof' && canViewDepenses
             ? 'paiements-prof'
@@ -336,7 +347,7 @@ export default function DepensesIndex({
             ? { ...next, dateFrom: '-', dateTo: '-' }
             : next;
 
-        router.get('/backoffice/depenses', { ...carried, ...calculQuery(), page: undefined, pageProf: undefined, pageValidation: undefined, tab }, {
+        router.get('/backoffice/depenses', { ...carried, ...calculQuery(), page: undefined, pageProf: undefined, pageValidation: undefined, pageDemandes: undefined, tab }, {
             preserveState: true,
             preserveScroll: true,
             replace: true,
@@ -543,7 +554,7 @@ export default function DepensesIndex({
 
     function switchTab(next: Tab) {
         setTab(next);
-        router.get('/backoffice/depenses', { ...filters, ...calculQuery(), page: undefined, pageProf: undefined, pageValidation: undefined, tab: next }, { preserveState: true, preserveScroll: true, replace: true });
+        router.get('/backoffice/depenses', { ...filters, ...calculQuery(), page: undefined, pageProf: undefined, pageValidation: undefined, pageDemandes: undefined, tab: next }, { preserveState: true, preserveScroll: true, replace: true });
     }
 
     // --- Dépenses ---
@@ -832,9 +843,29 @@ export default function DepensesIndex({
     function openCreateRemboursement() {
         setEditingRemboursement(null);
         remboursementForm.clearErrors();
-        remboursementForm.setData({ ...emptyRemboursementForm(), caisse_id: defaultCaisseId });
+        // Une DEMANDE ne nomme aucune caisse (02/11/2026) : le compte débité
+        // se décide à l'approbation, et le serveur refuse un caisse_id soumis.
+        remboursementForm.setData({ ...emptyRemboursementForm(), caisse_id: refundApprovalEnabled ? '' : defaultCaisseId });
         setStudentPayments([]);
         setShowRemboursementModal(true);
+    }
+
+    /**
+     * « Nouvelle demande » from a REFUSED request: same student, payment,
+     * amount and motif, re-submitted as a fresh request the user reviews. The
+     * payment list is reloaded first so the amount the server now allows is
+     * what the form shows (a refusal freed it; an approval elsewhere may not
+     * have).
+     */
+    async function openRequestAgain(row: DemandeRemboursementRow) {
+        openCreateRemboursement();
+        await onBeneficiaireChange(row.beneficiaireId);
+        remboursementForm.setData((previous) => ({
+            ...previous,
+            encaissement_id: row.encaissementId ?? '',
+            montant: Number(row.montant).toFixed(2),
+            motif: row.motif ?? '',
+        }));
     }
 
     function openEditRemboursement(row: RemboursementRow) {
@@ -880,7 +911,7 @@ export default function DepensesIndex({
         remboursementForm.setData({
             beneficiaire_id: Number(prefillBeneficiaire),
             encaissement_id: prefillEncaissement !== null ? Number(prefillEncaissement) : '',
-            caisse_id: defaultCaisseId,
+            caisse_id: refundApprovalEnabled ? '' : defaultCaisseId,
             montant: prefillMontant ?? '',
             date_remboursement: new Date().toISOString().slice(0, 10),
             motif: prefillMotif ?? '',
@@ -997,6 +1028,22 @@ export default function DepensesIndex({
                         </button>
                     </li>
                 )}
+                {showDemandesTab && (
+                    <li className="nav-item" role="presentation">
+                        <button
+                            type="button"
+                            className={`nav-link d-inline-flex align-items-center${tab === 'demandes-remboursement' ? ' active' : ''}`}
+                            aria-current={tab === 'demandes-remboursement' ? 'page' : undefined}
+                            onClick={() => switchTab('demandes-remboursement')}
+                        >
+                            <i className="ti ti-clipboard-list me-2" aria-hidden="true" />
+                            Demandes de remboursement
+                            {(demandesRemboursementEnAttente?.count ?? 0) > 0 && (
+                                <span className="badge bg-warning ms-2">{demandesRemboursementEnAttente?.count}</span>
+                            )}
+                        </button>
+                    </li>
+                )}
                 {/* Super-admin only: `expenses.approve` is in no role preset
                     (PermissionRegistry::matrix()), so canAudit is the
                     Gate::before bypass in practice. */}
@@ -1014,14 +1061,6 @@ export default function DepensesIndex({
                                 <span className="badge bg-warning ms-2">{validationEnAttenteCount}</span>
                             )}
                         </button>
-                    </li>
-                )}
-                {canViewTypes && (
-                    <li className="nav-item" role="presentation">
-                        <Link href="/backoffice/types-depenses" className="nav-link d-inline-flex align-items-center">
-                            <i className="ti ti-receipt-tax me-2" aria-hidden="true" />
-                            Types de dépenses
-                        </Link>
                     </li>
                 )}
             </ul>
@@ -1424,6 +1463,27 @@ export default function DepensesIndex({
                 </>
             )}
 
+            {/* Demandes de remboursement (02/11/2026) — their own tab, see
+                showDemandesTab. The list below the tabs stays money that
+                actually left a till. */}
+            {tab === 'demandes-remboursement' && showDemandesTab && demandesRemboursement && (
+                <DemandesRemboursementPanel
+                    demandes={demandesRemboursement}
+                    enAttente={demandesRemboursementEnAttente}
+                    statuts={demandeRemboursementStatuts}
+                    methodes={demandeRemboursementMethodes}
+                    statut={filters.demandeStatut}
+                    onStatutChange={(value) => reload({ demandeStatut: value })}
+                    canChooseMethode={canChooseRemboursementMethode}
+                    centerLocked={centerLocked}
+                    loading={isLoading}
+                    search={filters.search}
+                    onSearch={(value) => reload({ search: value })}
+                    onCreate={refundApprovalEnabled ? openCreateRemboursement : undefined}
+                    onRequestAgain={refundApprovalEnabled ? (row) => void openRequestAgain(row) : undefined}
+                />
+            )}
+
             {tab === 'remboursements' && canViewRemboursements && remboursements && (
                 <Card
                     title="Remboursements"
@@ -1435,7 +1495,7 @@ export default function DepensesIndex({
                             onClick={openCreateRemboursement}
                         >
                             <i className="ti ti-square-rounded-plus me-2" />
-                            Ajouter un remboursement
+                            {refundApprovalEnabled ? 'Demander un remboursement' : 'Ajouter un remboursement'}
                         </button>
                     }
                 >
@@ -1496,7 +1556,12 @@ export default function DepensesIndex({
                                             <code>{row.reference}</code>
                                         </td>
                                         <td>{row.beneficiaire ?? '-'}</td>
-                                        <td>{row.caisse ?? '-'}</td>
+                                        <td>
+                                            {row.caisse ?? '-'}
+                                            {row.methode !== 'Espèces' && (
+                                                <span className="badge bg-info-transparent ms-2">{row.methode}</span>
+                                            )}
+                                        </td>
                                         <td className="text-end">
                                             {row.annule ? (
                                                 <>
@@ -2118,7 +2183,9 @@ export default function DepensesIndex({
             {/* Remboursement modal */}
             <Modal
                 show={showRemboursementModal}
-                title={editingRemboursement ? 'Modifier le remboursement' : 'Ajouter un remboursement'}
+                title={editingRemboursement
+                    ? 'Modifier le remboursement'
+                    : refundApprovalEnabled ? 'Demander un remboursement' : 'Ajouter un remboursement'}
                 onClose={closeRemboursementModal}
                 processing={remboursementForm.processing}
                 size="xl"
@@ -2167,16 +2234,21 @@ export default function DepensesIndex({
                                 />
                             )}
                         </div>
-                        <div className="col-md-4">
-                            <DateField
-                                id="r-date"
-                                label="Date"
-                                required
-                                value={remboursementForm.data.date_remboursement}
-                                onChange={(e) => remboursementForm.setData('date_remboursement', e.target.value)}
-                                error={remboursementForm.errors.date_remboursement}
-                            />
-                        </div>
+                        {/* Une DEMANDE n'a pas de date de sortie : l'argent sort
+                            le jour de l'approbation, c'est cette date que porte
+                            le remboursement. */}
+                        {(editingRemboursement || !refundApprovalEnabled) && (
+                            <div className="col-md-4">
+                                <DateField
+                                    id="r-date"
+                                    label="Date"
+                                    required
+                                    value={remboursementForm.data.date_remboursement}
+                                    onChange={(e) => remboursementForm.setData('date_remboursement', e.target.value)}
+                                    error={remboursementForm.errors.date_remboursement}
+                                />
+                            </div>
+                        )}
                     </div>
 
                     {/* Which till the cash actually leaves. Read-only once
@@ -2185,6 +2257,20 @@ export default function DepensesIndex({
                         <div className="d-flex justify-content-between mb-3">
                             <span className="text-muted">Caisse débitée</span>
                             <span className="fw-medium">{editingRemboursement.caisse ?? '-'}</span>
+                        </div>
+                    ) : refundApprovalEnabled ? (
+                        /* Demande : RIEN n'est débité maintenant. On dit qui
+                           décide et d'où l'argent sortira, au lieu de laisser
+                           croire qu'une caisse bouge à l'enregistrement. */
+                        <div className="alert alert-info mb-3">
+                            Cette demande doit être approuvée par un directeur du centre ou un
+                            super-administrateur. Aucun montant ne sort de la caisse avant l&apos;approbation ;
+                            l&apos;argent sortira alors en espèces de votre caisse
+                            {remboursementCaisseParDefaut !== null ? ` (${remboursementCaisseParDefaut.nom})` : ''}, sauf
+                            si le super-administrateur choisit TPE ou virement (compte du centre).
+                            {remboursementForm.errors.caisse_id && (
+                                <div className="text-danger mt-1">{remboursementForm.errors.caisse_id}</div>
+                            )}
                         </div>
                     ) : canChooseRemboursementCaisse ? (
                         <div className="row">

@@ -16,31 +16,49 @@ use Illuminate\Http\Request;
  * super-admins) may flip a switch. Turning « Validation des dépenses » OFF
  * does NOT retroactively approve pending expenses: those stay "En attente"
  * and still need a decision, because their money was never debited and
- * silently releasing it would move cash nobody approved.
+ * silently releasing it would move cash nobody approved. « Validation des
+ * remboursements » (02/11/2026) follows the same rule for pending refund
+ * requests.
+ *
+ * Each switch is submitted on its own (the panel sends one key per toggle),
+ * so every key is `sometimes` — and each change is journaled separately.
  */
 final class SystemSettingController extends Controller
 {
+    /** Request key => [AppSettings key, French label for the journal]. */
+    private const SWITCHES = [
+        'expense_approval' => [AppSettings::EXPENSE_APPROVAL, 'Validation des dépenses'],
+        'refund_approval' => [AppSettings::REFUND_APPROVAL, 'Validation des remboursements'],
+    ];
+
     public function update(Request $request): RedirectResponse
     {
         abort_unless($request->user()->can('system-settings.update'), 403);
 
         $validated = $request->validate([
-            'expense_approval' => ['required', 'boolean'],
+            'expense_approval' => ['sometimes', 'required', 'boolean'],
+            'refund_approval' => ['sometimes', 'required', 'boolean'],
         ]);
 
-        AppSettings::setBool(AppSettings::EXPENSE_APPROVAL, (bool) $validated['expense_approval']);
+        foreach (self::SWITCHES as $field => [$key, $label]) {
+            if (! array_key_exists($field, $validated)) {
+                continue;
+            }
 
-        // Explicitly journaled: a switch that changes whether money can leave
-        // a till without approval must be traceable to a person and a moment.
-        activity('system-settings')
-            ->causedBy($request->user())
-            ->withProperties([
-                'reglage' => 'Validation des dépenses',
-                'valeur' => $validated['expense_approval'] ? 'Activée' : 'Désactivée',
-            ])
-            ->log($validated['expense_approval']
-                ? 'Validation des dépenses activée'
-                : 'Validation des dépenses désactivée');
+            $on = (bool) $validated[$field];
+            AppSettings::setBool($key, $on);
+
+            // Explicitly journaled: a switch that changes whether money can
+            // leave a till without approval must be traceable to a person
+            // and a moment.
+            activity('system-settings')
+                ->causedBy($request->user())
+                ->withProperties([
+                    'reglage' => $label,
+                    'valeur' => $on ? 'Activée' : 'Désactivée',
+                ])
+                ->log($label.($on ? ' activée' : ' désactivée'));
+        }
 
         return back()->with('success', __('System settings updated.'));
     }

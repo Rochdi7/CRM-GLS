@@ -52,6 +52,9 @@ final class ComptesMethodeTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // These tests record a refund DIRECTLY (till debited on submit) —
+        // the request/approval flow is DemandeRemboursementTest.
+        AppSettings::setBool(AppSettings::REFUND_APPROVAL, false);
         // Les avances de ce fichier sont datees du 10-21/09/2025 : on se place
         // dans leur delai de validite (14 jours, ValiditeAvance), sinon
         // chacune serait refusee comme expiree avant meme la regle testee.

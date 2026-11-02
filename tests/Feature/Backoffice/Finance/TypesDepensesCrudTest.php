@@ -59,10 +59,11 @@ final class TypesDepensesCrudTest extends TestCase
         $this->withPermissions('expense-types.view');
         TypeDepense::create(['nom' => 'Loyer', 'is_system' => false, 'statut' => TypeDepense::STATUT_ACTIF]);
 
-        $this->get(route('backoffice.types-depenses.index'))
+        $this->get(route('backoffice.settings', ['tab' => 'types-depenses']))
             ->assertInertia(fn (Assert $page) => $page
-                ->component('Backoffice/TypesDepenses/Index')
-                ->where('types.data.0.nom', 'Loyer')
+                ->component('Backoffice/Settings/Index')
+                ->where('activeTab', 'types-depenses')
+                ->where('typesDepenses.data.0.nom', 'Loyer')
             );
     }
 
@@ -71,6 +72,7 @@ final class TypesDepensesCrudTest extends TestCase
         $this->withPermissions('dashboard.view');
 
         $this->get(route('backoffice.types-depenses.index'))->assertForbidden();
+        $this->get(route('backoffice.settings', ['tab' => 'types-depenses']))->assertForbidden();
     }
 
     public function test_creating_is_forbidden_without_the_create_permission(): void
@@ -89,7 +91,7 @@ final class TypesDepensesCrudTest extends TestCase
 
         $this->post(route('backoffice.types-depenses.store'), [
             'nom' => 'Fournitures de bureau', 'statut' => TypeDepense::STATUT_ACTIF,
-        ])->assertRedirect(route('backoffice.types-depenses.index'));
+        ])->assertRedirect(route('backoffice.settings', ['tab' => 'types-depenses']));
 
         // The form NEVER creates a system type (schema §12).
         $this->assertDatabaseHas('types_depenses', [
@@ -126,7 +128,7 @@ final class TypesDepensesCrudTest extends TestCase
 
         $this->put(route('backoffice.types-depenses.update', $type), [
             'nom' => 'Loyer du centre', 'statut' => TypeDepense::STATUT_INACTIF,
-        ])->assertRedirect(route('backoffice.types-depenses.index'));
+        ])->assertRedirect(route('backoffice.settings', ['tab' => 'types-depenses']));
 
         $this->assertDatabaseHas('types_depenses', [
             'id' => $type->id,
@@ -165,9 +167,9 @@ final class TypesDepensesCrudTest extends TestCase
         $this->admin();
         $this->seed(TypeDepenseSeeder::class);
 
-        $this->get(route('backoffice.types-depenses.index'))
+        $this->get(route('backoffice.settings', ['tab' => 'types-depenses']))
             ->assertInertia(fn (Assert $page) => $page->where(
-                'types.data',
+                'typesDepenses.data',
                 fn ($rows) => collect($rows)->contains(fn ($row) => $row['nom'] === TypeDepense::SYSTEM_PAIEMENT_PROF && $row['isSystem'] === true),
             ));
     }
@@ -236,18 +238,23 @@ final class TypesDepensesCrudTest extends TestCase
         TypeDepense::create(['nom' => 'Loyer', 'is_system' => false, 'statut' => TypeDepense::STATUT_ACTIF]);
         TypeDepense::create(['nom' => 'Électricité', 'is_system' => false, 'statut' => TypeDepense::STATUT_ACTIF]);
 
-        $this->get(route('backoffice.types-depenses.index', ['search' => 'Loyer']))
+        $this->get(route('backoffice.settings', ['tab' => 'types-depenses', 'search' => 'Loyer']))
             ->assertInertia(fn (Assert $page) => $page
-                ->where('types.data.0.nom', 'Loyer')
-                ->where('types.total', 1)
+                ->where('typesDepenses.data.0.nom', 'Loyer')
+                ->where('typesDepenses.total', 1)
             );
     }
 
-    public function test_types_depenses_index_is_served_by_its_own_controller_not_a_redirect(): void
+    /**
+     * The list moved into Paramètres (02/11/2026): the old URL stays alive as
+     * a redirect to that tab, carrying the search along.
+     */
+    public function test_the_old_types_depenses_url_redirects_to_the_settings_tab(): void
     {
-        $action = app('router')->getRoutes()->getByName('backoffice.types-depenses.index')?->getActionName();
+        $this->withPermissions('expense-types.view');
 
-        $this->assertSame('App\Http\Controllers\Backoffice\TypeDepenseController@index', $action);
+        $this->get(route('backoffice.types-depenses.index', ['search' => 'Loyer']))
+            ->assertRedirect(route('backoffice.settings', ['tab' => 'types-depenses', 'search' => 'Loyer']));
     }
 
     public function test_the_depenses_management_page_no_longer_has_a_types_tab(): void

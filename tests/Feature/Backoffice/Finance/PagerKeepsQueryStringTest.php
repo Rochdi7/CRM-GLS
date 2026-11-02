@@ -93,12 +93,12 @@ final class PagerKeepsQueryStringTest extends TestCase
 
         $props = [];
         $this->actingAs($this->admin())
-            ->get('/backoffice/types-depenses?search=Fourniture')
+            ->get('/backoffice/settings?tab=types-depenses&search=Fourniture')
             ->assertInertia(function ($page) use (&$props): void {
                 $props = $page->toArray()['props'];
             });
 
-        foreach ($this->numberedLinks($props['types']) as $link) {
+        foreach ($this->numberedLinks($props['typesDepenses']) as $link) {
             parse_str((string) parse_url($link['url'], PHP_URL_QUERY), $query);
             $this->assertSame('Fourniture', $query['search'] ?? null, 'Le pager a perdu la recherche.');
         }

@@ -11,6 +11,7 @@ use App\Models\Caisse;
 use App\Models\CaisseTransfer;
 use App\Models\Cheque;
 use App\Models\Creneau;
+use App\Models\DemandeRemboursement;
 use App\Models\Depense;
 use App\Models\Employee;
 use App\Models\EnseignantTauxMensuel;
@@ -101,6 +102,7 @@ final class AuditLogRegistry
             Encaissement::class => ['encaissement', 'Encaissement'],
             Depense::class => ['depense', 'Dépense'],
             Remboursement::class => ['remboursement', 'Remboursement'],
+            DemandeRemboursement::class => ['demande_remboursement', 'Demande de remboursement'],
             CaisseTransfer::class => ['caisse_transfer', 'Transfert de caisse'],
             Cheque::class => ['cheque', 'Chèque'],
             Virement::class => ['virement', 'Virement'],

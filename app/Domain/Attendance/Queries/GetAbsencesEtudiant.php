@@ -31,13 +31,17 @@ use Illuminate\Support\Facades\DB;
  * Une « absence » = `Absent` ou `Justifié` (absence excusée). Les compteurs
  * portent sur TOUS les statuts, pour situer ces absences dans le total des
  * appels. Une requête pour toute la liste, jamais une par ligne.
+ *
+ * `appels` (02/11/2026) liste TOUS les appels, présences comprises : l'onglet
+ * montrait 33 présences au compteur sans aucune ligne pour les situer.
+ * `absences` en est le sous-ensemble, filtré ICI — la page ne refiltre rien.
  */
 final class GetAbsencesEtudiant
 {
     public const STATUTS_ABSENCE = [Presence::STATUT_ABSENT, Presence::STATUT_JUSTIFIE];
 
     /**
-     * @return array{total: int, compteurs: array<string, int>, absences: list<array<string, mixed>>}
+     * @return array{total: int, compteurs: array<string, int>, appels: list<array<string, mixed>>, absences: list<array<string, mixed>>}
      */
     public function pourEtudiant(Student $student): array
     {
@@ -45,7 +49,7 @@ final class GetAbsencesEtudiant
     }
 
     /**
-     * @return array{total: int, compteurs: array<string, int>, absences: list<array<string, mixed>>}
+     * @return array{total: int, compteurs: array<string, int>, appels: list<array<string, mixed>>, absences: list<array<string, mixed>>}
      */
     public function pourInscription(Inscription $inscription): array
     {
@@ -57,7 +61,7 @@ final class GetAbsencesEtudiant
     }
 
     /**
-     * @return array{total: int, compteurs: array<string, int>, absences: list<array<string, mixed>>}
+     * @return array{total: int, compteurs: array<string, int>, appels: list<array<string, mixed>>, absences: list<array<string, mixed>>}
      */
     private function lire(int $studentId, ?int $groupId, ?int $centreId = null): array
     {
@@ -79,38 +83,36 @@ final class GetAbsencesEtudiant
                 'g.nom as groupe', 'e.nom as enseignant_nom', 'e.prenom as enseignant_prenom',
             ]);
 
-        $compteurs = Presence::compteurs($rows);
+        $appels = $rows->map(fn ($r): array => [
+            'id' => (int) $r->id,
+            'seanceId' => (int) $r->seance_id,
+            'date' => Carbon::parse($r->date_seance)->format('d/m/Y'),
+            'heure' => $r->heure_debut !== null
+                ? substr((string) $r->heure_debut, 0, 5).($r->heure_fin !== null ? ' - '.substr((string) $r->heure_fin, 0, 5) : '')
+                : null,
+            'groupe' => $r->groupe,
+            'enseignant' => trim(($r->enseignant_prenom ?? '').' '.($r->enseignant_nom ?? '')) ?: null,
+            'statut' => (string) $r->statut,
+            'note' => $r->note,
+        ]);
 
         return [
             'total' => $rows->count(),
-            'compteurs' => $compteurs,
-            'absences' => $rows
-                ->whereIn('statut', self::STATUTS_ABSENCE)
-                ->values()
-                ->map(fn ($r): array => [
-                    'id' => (int) $r->id,
-                    'seanceId' => (int) $r->seance_id,
-                    'date' => Carbon::parse($r->date_seance)->format('d/m/Y'),
-                    'heure' => $r->heure_debut !== null
-                        ? substr((string) $r->heure_debut, 0, 5).($r->heure_fin !== null ? ' - '.substr((string) $r->heure_fin, 0, 5) : '')
-                        : null,
-                    'groupe' => $r->groupe,
-                    'enseignant' => trim(($r->enseignant_prenom ?? '').' '.($r->enseignant_nom ?? '')) ?: null,
-                    'statut' => (string) $r->statut,
-                    'note' => $r->note,
-                ])
-                ->all(),
+            'compteurs' => Presence::compteurs($rows),
+            'appels' => $appels->values()->all(),
+            'absences' => $appels->whereIn('statut', self::STATUTS_ABSENCE)->values()->all(),
         ];
     }
 
     /**
-     * @return array{total: int, compteurs: array<string, int>, absences: list<array<string, mixed>>}
+     * @return array{total: int, compteurs: array<string, int>, appels: list<array<string, mixed>>, absences: list<array<string, mixed>>}
      */
     private function vide(): array
     {
         return [
             'total' => 0,
             'compteurs' => Presence::compteurs([]),
+            'appels' => [],
             'absences' => [],
         ];
     }

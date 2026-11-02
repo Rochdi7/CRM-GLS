@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Finance\Queries;
 
+use App\Models\DemandeRemboursement;
 use App\Models\Encaissement;
 use Illuminate\Support\Collection;
 
@@ -48,6 +49,10 @@ final class GetStudentPaymentsForRefund
             ->with('fee')
             ->withSum('remboursements as rembourse_sum', 'montant')
             ->withSum('applications as applique_sum', 'montant')
+            // Ce que des DEMANDES de remboursement en attente réclament déjà
+            // sur ce paiement (02/11/2026) — DemanderRemboursement le refuse
+            // au-delà, donc le pré-remplissage ne le propose pas non plus.
+            ->withSum(['demandesRemboursement as demande_sum' => fn ($q) => $q->where('statut', DemandeRemboursement::STATUT_EN_ATTENTE)], 'montant')
             ->where('student_id', $studentId)
             // An "apply" row is not money received — it is a slice of its
             // parent avance already spent on a fee. It is refunded by
@@ -71,6 +76,7 @@ final class GetStudentPaymentsForRefund
             ->map(function (Encaissement $e): array {
                 $dejaRembourse = round((float) ($e->rembourse_sum ?? 0), 2);
                 $applique = round((float) ($e->applique_sum ?? 0), 2);
+                $demande = round((float) ($e->demande_sum ?? 0), 2);
 
                 // An avance gives back only what is still unallocated
                 // (applied + already refunded is gone); a fee payment gives
@@ -78,9 +84,9 @@ final class GetStudentPaymentsForRefund
                 // rule EnregistrerRemboursement enforces inside its locked
                 // transaction — this is the UI's preview of it, never the
                 // authority.
-                $remboursable = $e->isAvance()
+                $remboursable = ($e->isAvance()
                     ? (float) $e->montant - $applique - $dejaRembourse
-                    : (float) $e->montant - $dejaRembourse;
+                    : (float) $e->montant - $dejaRembourse) - $demande;
 
                 return [
                     'id' => $e->id,
@@ -91,6 +97,7 @@ final class GetStudentPaymentsForRefund
                     'feeNom' => $e->fee?->nom,
                     'isAvance' => $e->isAvance(),
                     'dejaRembourse' => number_format($dejaRembourse, 2, '.', ''),
+                    'enAttente' => number_format($demande, 2, '.', ''),
                     'montantRemboursable' => number_format(round(max(0.0, $remboursable), 2), 2, '.', ''),
                     // Listé mais NON sélectionnable : même refus
                     // qu'EnregistrerRemboursement (frais masqué), porté à

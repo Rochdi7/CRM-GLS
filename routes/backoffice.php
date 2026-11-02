@@ -43,6 +43,7 @@ use App\Http\Controllers\Backoffice\PermissionController;
 use App\Http\Controllers\Backoffice\ProfileController;
 use App\Http\Controllers\Backoffice\RapportController;
 use App\Http\Controllers\Backoffice\RecouvrementController;
+use App\Http\Controllers\Backoffice\DemandeRemboursementController;
 use App\Http\Controllers\Backoffice\RemboursementController;
 use App\Http\Controllers\Backoffice\Roles\RoleController;
 use App\Http\Controllers\Backoffice\SalleController;
@@ -890,6 +891,15 @@ Route::prefix('backoffice')
                 ->middleware('permission:refunds.cancel')->name('remboursements.cancel');
             Route::get('students/{student}/payments-for-refund', [RemboursementController::class, 'studentPayments'])
                 ->name('students.payments-for-refund');
+            // Demandes de remboursement (02/11/2026) — quand « Validation des
+            // remboursements » est active, remboursements.store crée une
+            // DEMANDE ; l'argent ne sort qu'à l'approbation. Décider =
+            // `refunds.approve` (directeur dans ses centres + super-admin),
+            // rejoué par DemandeRemboursementPolicy.
+            Route::patch('demandes-remboursement/{demande}/approuver', [DemandeRemboursementController::class, 'approuver'])
+                ->middleware('permission:refunds.approve')->name('demandes-remboursement.approuver');
+            Route::patch('demandes-remboursement/{demande}/refuser', [DemandeRemboursementController::class, 'refuser'])
+                ->middleware('permission:refunds.approve')->name('demandes-remboursement.refuser');
             // No remboursements.show — zero detail page anywhere in the live
             // app, preserved (docs/rapports/finance/phase-10-finance-mapping.md Q2).
 

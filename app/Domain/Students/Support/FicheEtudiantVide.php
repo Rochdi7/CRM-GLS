@@ -37,6 +37,7 @@ final class FicheEtudiantVide
         ['presences', 'student_id'],
         ['inscriptions_historique', 'student_id'],
         ['remboursements', 'beneficiaire_id'],
+        ['demandes_remboursement', 'beneficiaire_id'],
         ['virements', 'student_id'],
         ['student_transfers', 'student_id'],
         ['student_transfers', 'nouveau_student_id'],

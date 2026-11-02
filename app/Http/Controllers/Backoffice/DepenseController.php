@@ -13,6 +13,7 @@ use App\Domain\Finance\Support\VentilationCentre;
 use App\Domain\Expenses\Actions\RefuserDepense;
 use App\Domain\Expenses\Queries\GetDepenseDetails;
 use App\Domain\Expenses\Queries\GetDepensesList;
+use App\Domain\Finance\Queries\GetDemandesRemboursementList;
 use App\Domain\Finance\Queries\GetRemboursementsList;
 use App\Domain\Payroll\Actions\CalculerPaiementProfParPaliers;
 use App\Domain\Payroll\Support\CotisationCnss;
@@ -23,6 +24,7 @@ use App\Http\Controllers\Backoffice\Concerns\ResolvesPaiementProfCalcul;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Depenses\StoreDepenseRequest;
 use App\Http\Requests\Backoffice\Depenses\UpdateDepenseRequest;
+use App\Models\DemandeRemboursement;
 use App\Models\Depense;
 use App\Models\Group;
 use App\Services\Context\CurrentContext;
@@ -69,6 +71,7 @@ final class DepenseController extends Controller
         GetDepensesList $getDepensesList,
         GetRemboursementsList $getRemboursementsList,
         GetPaiementProfCalcul $getPaiementProfCalcul,
+        GetDemandesRemboursementList $getDemandesRemboursement,
     ): Response {
         $user = $request->user();
         abort_unless($user->canAny(['expenses.view', 'refunds.view']), 403);
@@ -112,6 +115,11 @@ final class DepenseController extends Controller
         $dateTo = self::filterValue($request->string('dateTo'));
         $statutFilter = (string) $request->string('statutFilter');
         $perPage = (int) $request->integer('perPage', GetDepensesList::DEFAULT_PER_PAGE);
+        // Statut des demandes de remboursement listées (02/11/2026). Vide =
+        // TOUTES : l'onglet est aussi l'HISTORIQUE — une demande refusée
+        // reste listée avec son motif, jamais escamotée par un filtre par
+        // défaut (signalé le même jour : DRB-002 refusée « disparaissait »).
+        $demandeStatut = (string) $request->string('demandeStatut');
 
         // Has the user engaged the date filter AT ALL? Only the request can
         // tell « never touched » from « cleared » — and the read model must
@@ -273,6 +281,25 @@ final class DepenseController extends Controller
                 ? $getRemboursementsList->totaux($user, $search, $caisseFilter, $dateFrom, $dateTo, $dateFilterEngaged)
                 : null,
             'students' => $user->can('refunds.view') ? $getRemboursementsList->studentOptions($user) : [],
+            // Demandes de remboursement (02/11/2026). Quand la validation est
+            // active, « Ajouter un remboursement » crée une DEMANDE : aucune
+            // caisse ne bouge avant qu'un directeur (dans ses centres) ou un
+            // super-admin l'approuve.
+            'refundApprovalEnabled' => AppSettings::refundApprovalEnabled(),
+            'demandesRemboursement' => $user->can('refunds.view')
+                ? $getDemandesRemboursement($user, $search, $demandeStatut, $perPage)
+                : null,
+            // Badge de l'onglet + montant en attente — hors recherche, hors
+            // filtre de statut, calculés en SQL (jamais un reduce() client).
+            'demandesRemboursementEnAttente' => $user->can('refunds.view')
+                ? $getDemandesRemboursement->enAttente($user)
+                : null,
+            'demandeRemboursementStatuts' => DemandeRemboursement::STATUTS,
+            'demandeRemboursementMethodes' => DemandeRemboursement::METHODES,
+            // UI convenience only (§5) — la policy et le Form Request restent
+            // les vrais verrous.
+            'canApproveRemboursement' => $user->can('refunds.approve'),
+            'canChooseRemboursementMethode' => $user->can('refunds.choose-method'),
             // Cash tills of the active centre — the refund form now names the
             // till (and therefore the employee) the money leaves, instead of
             // silently draining the acting cashier's own (03/09/2026).
@@ -316,6 +343,7 @@ final class DepenseController extends Controller
                 'dateFrom' => $dateFrom,
                 'dateTo' => $dateTo,
                 'statutFilter' => $statutFilter,
+                'demandeStatut' => $demandeStatut,
                 'perPage' => $perPage,
             ],
         ]);

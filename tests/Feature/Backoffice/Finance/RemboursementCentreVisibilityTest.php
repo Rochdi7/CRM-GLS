@@ -12,6 +12,7 @@ use App\Models\Remboursement;
 use App\Models\Student;
 use App\Models\User;
 use App\Services\Context\CurrentContext;
+use App\Support\Settings\AppSettings;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -43,6 +44,9 @@ final class RemboursementCentreVisibilityTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // These tests record a refund DIRECTLY (till debited on submit) —
+        // the request/approval flow is DemandeRemboursementTest.
+        AppSettings::setBool(AppSettings::REFUND_APPROVAL, false);
         $this->seed(RolesAndPermissionsSeeder::class);
         $this->centreCaisse = Etablissement::factory()->create();
         $this->centreEtudiant = Etablissement::factory()->create();

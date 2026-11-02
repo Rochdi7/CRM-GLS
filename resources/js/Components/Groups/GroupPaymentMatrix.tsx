@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { enCapitales } from '@/Lib/nom';
+import { statutGridFill } from '@/Lib/inscriptionStatut';
 import type {
     GroupPaymentCell,
     GroupPaymentColumn,
@@ -51,15 +52,6 @@ const CELL_FILL: Record<GroupPaymentCell['state'], string> = {
     impaye: 'rgb(246, 45, 81)',
 };
 
-/** Row (N° + name) background per inscription statut. */
-const ROW_FILL: Record<string, string | undefined> = {
-    Active: undefined,
-    Changement: 'rgb(170, 170, 170)',
-    Annulée: 'rgb(246, 45, 81)',
-    // Transferred to another centre (ValiderTransfertEtudiant): orange so the
-    // old centre's grid tells it apart from a grey « Changement » at a glance.
-    Transférée: 'rgb(253, 126, 20)',
-};
 
 const ABSENT_FILL = 'rgb(170, 170, 170)';
 
@@ -126,7 +118,7 @@ function cellTip(cell: GroupPaymentCell, column: GroupPaymentColumn): MatrixTip 
  */
 const STATUT_TITRE: Record<string, { titre: string; verbe: string }> = {
     Annulée: { titre: 'Annulé', verbe: 'Annulé' },
-    Changement: { titre: 'Archivé', verbe: 'Archivé' },
+    Changement: { titre: 'Changement de groupe', verbe: 'Changé de groupe' },
     Archivée: { titre: 'Archivé', verbe: 'Archivé' },
     Expirée: { titre: 'Expiré', verbe: 'Expiré' },
     Transférée: { titre: 'Transféré', verbe: 'Transféré' },
@@ -697,7 +689,9 @@ function MatrixBody({
                     </thead>
                     <tbody>
                         {matrix.rows.map((row) => {
-                            const rowFill = ROW_FILL[row.statut];
+                            // Row (N° + name) fill per inscription statut —
+                            // shared with Absence par groupe and Paiement prof.
+                            const rowFill = statutGridFill(row.statut);
 
                             return (
                                 <tr key={row.key}>
@@ -705,11 +699,11 @@ function MatrixBody({
                                         the name: both halves are one coloured
                                         block to the eye, so hovering either
                                         must explain it. */}
-                                    <td style={{ ...CELL_STYLE, background: rowFill }} {...bind(rowTip(row))}>
+                                    <td style={{ ...CELL_STYLE, ...rowFill }} {...bind(rowTip(row))}>
                                         {row.numero}
                                     </td>
                                     <td
-                                        style={{ ...CELL_STYLE, background: rowFill, textAlign: 'left' }}
+                                        style={{ ...CELL_STYLE, ...rowFill, textAlign: 'left' }}
                                         {...bind(rowTip(row))}
                                     >
                                         {/* Photo à GAUCHE du nom — la même source

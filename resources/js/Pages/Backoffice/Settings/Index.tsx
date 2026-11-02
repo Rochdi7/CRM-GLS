@@ -8,6 +8,7 @@ import FraisPanel from '@/Pages/Backoffice/Settings/FraisPanel';
 import BanquesPanel from '@/Pages/Backoffice/Settings/BanquesPanel';
 import MotifsAnnulationPanel from '@/Pages/Backoffice/Settings/MotifsAnnulationPanel';
 import SystemePanel from '@/Pages/Backoffice/Settings/SystemePanel';
+import TypesDepensesPanel from '@/Pages/Backoffice/Settings/TypesDepensesPanel';
 import type { SettingsPageProps, SettingsTab } from '@/Types';
 
 const TAB_LABELS: Record<SettingsTab, { label: string; icon: string }> = {
@@ -17,6 +18,7 @@ const TAB_LABELS: Record<SettingsTab, { label: string; icon: string }> = {
     frais: { label: 'Frais', icon: 'ti ti-receipt' },
     banques: { label: 'Banques', icon: 'ti ti-building-bank' },
     'motifs-annulation': { label: 'Raisons d’annulation ou archivage', icon: 'ti ti-refresh' },
+    'types-depenses': { label: 'Types de dépenses', icon: 'ti ti-receipt-tax' },
     systeme: { label: 'Système', icon: 'ti ti-settings-cog' },
 };
 
@@ -40,6 +42,8 @@ export default function SettingsIndex({
     frais,
     banques,
     motifsAnnulation,
+    typesDepenses,
+    typesDepensesFilters,
     systeme,
 }: SettingsPageProps) {
     function switchTab(tab: SettingsTab) {
@@ -97,6 +101,13 @@ export default function SettingsIndex({
                     {activeTab === 'banques' && banques && <BanquesPanel banques={banques} permissions={permissions.banques} />}
                     {activeTab === 'motifs-annulation' && motifsAnnulation && (
                         <MotifsAnnulationPanel motifsAnnulation={motifsAnnulation} permissions={permissions['motifs-annulation']} />
+                    )}
+                    {activeTab === 'types-depenses' && typesDepenses && (
+                        <TypesDepensesPanel
+                            types={typesDepenses}
+                            filters={typesDepensesFilters ?? { search: '' }}
+                            permissions={permissions['types-depenses']}
+                        />
                     )}
                     {activeTab === 'systeme' && systeme && (
                         <SystemePanel systeme={systeme} permissions={permissions.systeme} />

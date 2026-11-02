@@ -554,7 +554,7 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
                                             <i className="ti ti-user" aria-hidden="true" />
                                         </span>
                                         <span
-                                            className="badge badge-soft-secondary d-inline-flex align-items-center gap-1"
+                                            className="badge badge-soft-info d-inline-flex align-items-center gap-1"
                                             title="Inscriptions en changement"
                                         >
                                             {group.inscriptionsChangementCount}
@@ -574,15 +574,6 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
                                             {group.inscriptionsArchiveesCount}
                                             <i className="ti ti-archive" aria-hidden="true" />
                                         </span>
-                                        {group.inscriptionsAutresCount > 0 && (
-                                            <span
-                                                className="badge badge-soft-info d-inline-flex align-items-center gap-1"
-                                                title="Autres inscriptions (expirées, transférées…)"
-                                            >
-                                                {group.inscriptionsAutresCount}
-                                                <i className="ti ti-dots" aria-hidden="true" />
-                                            </span>
-                                        )}
                                     </div>
                                 </td>
                                 <td>

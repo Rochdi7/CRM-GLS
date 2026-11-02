@@ -406,6 +406,17 @@ final class PermissionRegistry
                 // explicite. Un caisse_id soumis sans ce droit est REFUSÉ
                 // (422), jamais accepté en silence.
                 'refunds.choose-till' => "Choisir la caisse à débiter d'un remboursement (directeur)",
+                // ⚠ Demandes de remboursement (02/11/2026). Quand « Validation
+                // des remboursements » est active, un remboursement naît
+                // DEMANDE et ne débite rien ; l'approuver est le seul moment
+                // où l'argent sort. Preset `director` seul (+ super-admin),
+                // borné aux centres affectés par DemandeRemboursementPolicy.
+                'refunds.approve' => 'Approuver ou refuser une demande de remboursement (directeur)',
+                // Choisir TPE / Virement à l'approbation : l'argent sort alors
+                // du compte de cette méthode du centre, pas d'un tiroir.
+                // Super-admin uniquement (superAdminOnly() ci-dessous) — un
+                // directeur approuve toujours en Espèces.
+                'refunds.choose-method' => "Choisir la méthode d'un remboursement à l'approbation (super-admin)",
             ],
             'Chèques' => [
                 'cheques.view' => 'Consulter les chèques',
@@ -688,6 +699,10 @@ final class PermissionRegistry
             // mouvement d'argent en sens inverse, pas une correction de
             // libellé. Même classe que payments.update-amount (03/09/2026).
             'refunds.cancel',
+            // Faire sortir un remboursement du compte TPE / Virement d'un
+            // centre au lieu d'un tiroir (02/11/2026, décision du
+            // propriétaire) : aucun preset, directeur compris.
+            'refunds.choose-method',
             // Annuler une dépense approuvée recrédite la caisse — même
             // mouvement, même classe que refunds.cancel (09/09/2026).
             'expenses.cancel',
@@ -1042,6 +1057,10 @@ final class PermissionRegistry
                 // Rembourser depuis la caisse d'un AUTRE employé : le seul
                 // rôle qui le porte (10/09/2026, voir le groupe Remboursements).
                 'refunds.choose-till',
+                // Approuver les demandes de remboursement de SES centres
+                // (02/11/2026) — toujours en Espèces, le choix de la méthode
+                // reste au super-admin (refunds.choose-method).
+                'refunds.approve',
                 'academic-years.create', 'academic-years.update',
                 'fees.create', 'fees.update',
                 'employees.view', 'employees.update',

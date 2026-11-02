@@ -23,6 +23,12 @@ final class AppSettings
     public const EXPENSE_APPROVAL = 'expenses.approval_required';
 
     /**
+     * Remboursements go through a REQUEST approved by a director (in their
+     * centres) or a super-admin instead of debiting instantly (02/11/2026).
+     */
+    public const REFUND_APPROVAL = 'refunds.approval_required';
+
+    /**
      * `options` bag: the permission preset RolesAndPermissionsSeeder last
      * applied, per role name — `['accountant' => ['dashboard.view', …], …]`.
      * Read only by that seeder, so a re-seed can tell a permission the CODE
@@ -39,6 +45,7 @@ final class AppSettings
     public const DEFAULTS = [
         // ON by default: money must not leave a till without a decision.
         self::EXPENSE_APPROVAL => true,
+        self::REFUND_APPROVAL => true,
     ];
 
     /**
@@ -157,5 +164,11 @@ final class AppSettings
     public static function expenseApprovalEnabled(): bool
     {
         return self::bool(self::EXPENSE_APPROVAL);
+    }
+
+    /** Is a new remboursement a REQUEST (no till moves until it is approved)? */
+    public static function refundApprovalEnabled(): bool
+    {
+        return self::bool(self::REFUND_APPROVAL);
     }
 }

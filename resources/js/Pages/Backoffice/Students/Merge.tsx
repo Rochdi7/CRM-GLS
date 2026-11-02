@@ -115,7 +115,9 @@ const statutBadge = (statut: string) => {
         case 'Annulée':
             return 'badge-soft-danger';
         case 'Changement':
-            return 'badge-soft-warning';
+            return 'badge-soft-info';
+        case 'Transférée':
+            return 'badge-soft-orange';
         default:
             return 'badge-soft-secondary';
     }

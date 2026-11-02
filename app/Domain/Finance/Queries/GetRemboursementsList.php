@@ -52,6 +52,10 @@ final class GetRemboursementsList
             'beneficiaireId' => $r->beneficiaire_id,
             'caisse' => $r->caisse?->nom,
             'caisseId' => $r->caisse_id,
+            // Lue sur le compte DÉBITÉ (02/11/2026) : un remboursement approuvé
+            // par un super-admin peut sortir du compte TPE / Virement du
+            // centre ; tout ce qui sort d'un tiroir est de l'espèce.
+            'methode' => in_array($r->caisse?->type, Caisse::TYPES_METHODE, true) ? $r->caisse->type : \App\Models\Encaissement::METHODE_ESPECES,
             'montant' => number_format((float) $r->montant, 2, '.', ''),
             'dateRemboursement' => $r->date_remboursement?->toDateString(),
             'motif' => $r->motif,

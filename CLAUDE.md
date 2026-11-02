@@ -467,7 +467,10 @@ the database layer. Non-negotiable invariants already enforced in code:
     settles them (accounting rule confirmed 24/08/2026). Never route these
     by method. ONE exception, `CaisseResolver::forRemboursement()`: a refund
     linked to a payment funded by a chèque now **Rejeté** reverses the
-    centre's Chèque account (that money never reached the till).
+    centre's Chèque account (that money never reached the till). And since
+    02/11/2026 an APPROVED refund request may leave the centre's TPE /
+    Virement account — super-admin's choice only, see « Un remboursement
+    est une DEMANDE » below. A dépense still never routes by method.
   - **transfers** move cash between cash accounts only
     (`DemanderTransfertCaisse` / `ValiderTransfertCaisse` refuse a method
     account; `caisseOptions()` never offers one).
@@ -642,6 +645,42 @@ the database layer. Non-negotiable invariants already enforced in code:
   trou se déplace simplement vers celui qui ne contrôle rien. Borne
   `montant <= solde`, vider un tiroir jusqu'à 0,00 reste légitime. Tests :
   `tests/Feature/Backoffice/Finance/RemboursementCaisseChoisieTest.php`.
+- **⚠ Un remboursement est une DEMANDE quand « Validation des
+  remboursements » est active** (02/11/2026, `AppSettings::REFUND_APPROVAL`,
+  ON par défaut, Paramètres → Système ; table `demandes_remboursement`,
+  `Finance\Actions\{Demander,ApprouverDemande,RefuserDemande}Remboursement`).
+  `remboursements.store` crée alors une demande qui ne débite RIEN et ne crée
+  AUCUNE ligne `remboursements`. Une table À PART, jamais un statut sur
+  `remboursements` : une quarantaine de lectures (journal, payé net, avances,
+  relevés, auditeur) comptent chaque ligne `remboursements` comme de l'argent
+  sorti. Cinq bornes : (1) **décider = `refunds.approve`**, preset `director`
+  seul (+ super-admin), borné aux centres affectés sur le centre de la
+  DEMANDE (`DemandeRemboursementPolicy`) ; (2) **Espèces par défaut = la
+  caisse PHYSIQUE du DEMANDEUR** (`CaisseResolver::forRemboursement`,
+  exception du chèque rejeté comprise), jamais celle de l'approbateur ;
+  (3) **TPE / Virement = super-admin seul** (`refunds.choose-method`,
+  `superAdminOnly()`) — l'argent sort du compte de cette méthode du centre de
+  la DEMANDE ; une autre méthode soumise sans le droit est REFUSÉE (422),
+  jamais ramenée en silence à Espèces, et un paiement d'un chèque rejeté
+  s'approuve en Espèces seulement ; (4) l'approbation passe par
+  `EnregistrerRemboursement` — plafond du paiement, frais masqué et
+  `GardeSoldeCaisse` rejoués sous verrou, désormais AUSSI sur les comptes
+  TPE / Virement (seul le compte Chèque en est exempté) ; le remboursement
+  est daté du jour de l'approbation, `agent_id` = le demandeur ;
+  (5) une demande liée à un paiement est plafonnée à son restant MOINS les
+  autres demandes en attente (`assertPaiementRemboursable`, la même règle
+  que l'approbation). Un refus garde la ligne avec son motif ET LIBÈRE le
+  paiement : seule une demande APPROUVÉE le consomme, et une ligne refusée
+  propose « Nouvelle demande » pré-remplie. L'onglet « Demandes de
+  remboursement » est aussi l'HISTORIQUE : il s'ouvre sur TOUS les statuts
+  (en attente d'abord), jamais sur un filtre qui escamoterait un refus. Couper
+  l'interrupteur ne libère aucune demande en attente (leur onglet À PART
+  « Demandes de remboursement » de Gestion des dépenses reste affiché tant
+  qu'il en reste ; l'onglet Remboursements ne liste que l'argent sorti) ; ÉTEINT, l'ancien chemin direct (avec
+  `refunds.choose-till`) revient tel quel. `caisse:verifier-coherence`
+  accepte un remboursement dans un compte TPE / Virement seulement s'il naît
+  d'une demande approuvée avec cette méthode et ce centre. Tests :
+  `tests/Feature/Backoffice/Finance/DemandeRemboursementTest.php`.
 - **A dépense and a « Paiement prof » are the SAME table but two different
   forms** (26/08/2026). Gestion des dépenses has one modal per tab, and the
   contract is enforced server-side by
@@ -1200,7 +1239,10 @@ the database layer. Non-negotiable invariants already enforced in code:
   cherchait manquait — un écran qui masque ressemble à un écran qui n'a pas
   la donnée. Désormais chaque ligne porte `statut` + `payable`, les payables
   d'abord, et le composant peint le statut avec `Lib/inscriptionStatut`
-  (vert Active, **jaune Changement, rouge Annulée**, gris le reste) — la
+  (vert Active, **bleu clair Changement, orange Transférée, rouge Annulée**,
+  gris le reste — Archivée comprise ; 02/11/2026, la MÊME palette remplit la
+  cellule nom de « Statistique de groupe », « Absence par groupe » et du calcul
+  « Paiement prof » via `statutGridFill`) — la
   MÊME table que les badges de la liste Inscriptions, extraite pour ne pas
   exister en double.
   **⚠ Les deux écrans n'ont PAS la même règle, et le read-model porte les
@@ -1758,7 +1800,10 @@ the database layer. Non-negotiable invariants already enforced in code:
     `tests/Feature/Backoffice/Inscriptions/InscriptionChangeGroupTest.php`,
     `tests/Feature/Backoffice/Context/ContextScopeWriteGuardTest.php`.
 - **Referential data (établissements, années scolaires, salles) is managed via
-  the tabbed Paramètres page** — route `backoffice.settings`
+  the tabbed Paramètres page** — since 02/11/2026 « Types de dépenses » is a
+  tab there too (`types-depenses`, `expense-types.view`,
+  `Settings/TypesDepensesPanel.tsx`); `backoffice.types-depenses.index`
+  only redirects to it and the CRUD endpoints land back on it. Route `backoffice.settings`
   (`SettingController`), one React panel per tab under
   `resources/js/Pages/Backoffice/Settings/{Etablissements,AnneesScolaires,Salles,Frais}Panel.tsx`.
   Access = ANY of `centers.view`/`academic-years.view`/`rooms.view`; each tab

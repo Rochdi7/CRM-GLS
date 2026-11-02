@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { Link, router } from '@inertiajs/react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
@@ -6,6 +7,7 @@ import DateField from '@/Components/Forms/DateField';
 import TableToolbar from '@/Components/Tables/TableToolbar';
 import { useFilterReset } from '@/Hooks/useFilterReset';
 import { withGroupStatutTone } from '@/Lib/groupStatut';
+import { statutGridFill } from '@/Lib/inscriptionStatut';
 import type { SelectOption } from '@/Types';
 
 interface GroupOption extends SelectOption {
@@ -93,27 +95,15 @@ function seanceTitle(seance: MatriceSeance): string {
 }
 
 /**
- * Name-cell fill per inscription statut — the SAME split « Détails paiement »
- * uses (Components/Groups/GroupPaymentMatrix.tsx ROW_FILL): grey once the
- * enrollment has moved on, red only for a cancellation, nothing while it is
- * Active. Keyed on the statut rather than on the `actif` boolean so the two
- * screens can never drift apart; an unknown statut falls back to grey (closed
- * but not cancelled), never to red.
+ * Name-cell fill per inscription statut — the SAME palette « Statistique de
+ * groupe » and the « Paiement prof » calculation use (Lib/inscriptionStatut
+ * statutGridFill): nothing while Active, red Annulée, light blue Changement,
+ * orange Transférée, grey for everything else closed. Keyed on the statut
+ * rather than on the `actif` boolean alone so the screens can never drift
+ * apart.
  */
-const ROW_CLASS: Record<string, string> = {
-    Active: '',
-    Changement: 'gls-absence-clos',
-    Expirée: 'gls-absence-clos',
-    Archivée: 'gls-absence-clos',
-    Annulée: 'gls-absence-annulee',
-};
-
-function rowClass(student: MatriceStudent): string {
-    if (student.actif) {
-        return '';
-    }
-
-    return ROW_CLASS[student.inscriptionStatut] ?? 'gls-absence-clos';
+function nameCellStyle(student: MatriceStudent): CSSProperties | undefined {
+    return student.actif ? undefined : statutGridFill(student.inscriptionStatut);
 }
 
 /**
@@ -307,13 +297,14 @@ export default function AbsenceParGroupe({
                                 </thead>
                                 <tbody>
                                     {matrice.students.map((student) => (
-                                        <tr key={student.id} className={rowClass(student)}>
+                                        <tr key={student.id}>
                                             {/* The statut is what the row's
                                                 colour means, so it is spelled
                                                 out on hover — a grey name is
                                                 otherwise unexplained. */}
                                             <td
                                                 className="gls-absence-student"
+                                                style={nameCellStyle(student)}
                                                 title={student.actif ? undefined : `Inscription ${student.inscriptionStatut}`}
                                             >
                                                 <Link

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Backoffice;
 
 use App\Domain\Centers\Queries\GetEtablissementsList;
+use App\Domain\Expenses\Queries\GetTypesDepensesList;
 use App\Domain\Settings\Queries\GetAccessibleCenterOptions;
 use App\Domain\Settings\Queries\GetAnneesScolairesList;
 use App\Domain\Settings\Queries\GetBanquesList;
@@ -18,6 +19,7 @@ use App\Models\Etablissement;
 use App\Models\Frais;
 use App\Models\MotifAnnulation;
 use App\Models\Salle;
+use App\Models\TypeDepense;
 use App\Models\User;
 use App\Services\Context\CurrentContext;
 use App\Support\Settings\AppSettings;
@@ -48,6 +50,9 @@ final class SettingController extends Controller
         'frais' => 'fees.view',
         'banques' => 'banks.view',
         'motifs-annulation' => 'cancellation-reasons.view',
+        // Types de dépenses (02/11/2026) — was its own page, linked as the
+        // last tab of Gestion des dépenses; a catalog like Banques/Frais.
+        'types-depenses' => 'expense-types.view',
         // Application-wide switches (dépense approval...). No role preset
         // holds system-settings.view, so in practice super-admins only.
         'systeme' => 'system-settings.view',
@@ -61,6 +66,7 @@ final class SettingController extends Controller
         GetFraisList $getFraisList,
         GetBanquesList $getBanquesList,
         GetMotifsAnnulationList $getMotifsAnnulationList,
+        GetTypesDepensesList $getTypesDepensesList,
         GetAccessibleCenterOptions $getAccessibleCenterOptions,
         CurrentContext $context,
     ): Response {
@@ -110,8 +116,16 @@ final class SettingController extends Controller
             ],
             'banques' => $props['banques'] = $getBanquesList(),
             'motifs-annulation' => $props['motifsAnnulation'] = $getMotifsAnnulationList(),
+            'types-depenses' => $props += [
+                'typesDepenses' => $getTypesDepensesList(
+                    (string) $request->query('search', ''),
+                    in_array((int) $request->query('per_page', 10), [10, 25, 50, 100], true) ? (int) $request->query('per_page', 10) : 10,
+                ),
+                'typesDepensesFilters' => ['search' => (string) $request->query('search', '')],
+            ],
             'systeme' => $props['systeme'] = [
                 'expenseApproval' => AppSettings::expenseApprovalEnabled(),
+                'refundApproval' => AppSettings::refundApprovalEnabled(),
             ],
             default => null,
         };
@@ -131,6 +145,7 @@ final class SettingController extends Controller
             'frais' => [Frais::class, 'fees'],
             'banques' => [Banque::class, 'banks'],
             'motifs-annulation' => [MotifAnnulation::class, 'cancellation-reasons'],
+            'types-depenses' => [TypeDepense::class, 'expense-types'],
             // Système has no CRUD model behind it - only an update switch.
             'systeme' => [null, 'system-settings'],
         };

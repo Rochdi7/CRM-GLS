@@ -5,7 +5,7 @@ import StatusBadge from '@/Components/Details/StatusBadge';
 import RelatedRecordsTable from '@/Components/Details/RelatedRecordsTable';
 import { statutVariant } from '@/Lib/inscriptionStatut';
 import { useState } from 'react';
-import AbsencesPanel, { presenceVariant } from '@/Components/Attendance/AbsencesPanel';
+import AbsencesPanel, { compteursVisibles, presenceVariant } from '@/Components/Attendance/AbsencesPanel';
 import type { AbsencesEtudiant, StudentDetails } from '@/Types';
 import { enCapitales } from '@/Lib/nom';
 
@@ -92,8 +92,8 @@ export default function StudentShow({ student, absences }: StudentShowProps) {
                         className={`nav-link rounded${tab === 'absences' ? ' active' : ''}`}
                         onClick={() => setTab('absences')}
                     >
-                        <i className="ti ti-calendar-x me-1" />
-                        Absences ({absences.absences.length})
+                        <i className="ti ti-calendar-check me-1" />
+                        Présences ({absences.total})
                     </button>
                 </li>
                 {aHistorique && (
@@ -113,9 +113,9 @@ export default function StudentShow({ student, absences }: StudentShowProps) {
             {tab === 'absences' && (
                 <AbsencesPanel
                     data={absences}
-                    scope={`Absences de ${enCapitales(student.nomComplet)} à ${student.centre ?? 'son centre'} uniquement, tous groupes de ce centre.${
+                    scope={`Appels de ${enCapitales(student.nomComplet)} à ${student.centre ?? 'son centre'} uniquement, tous groupes de ce centre.${
                         student.historiqueTransfert.length > 0
-                            ? " Celles du centre précédent ne sont pas comptées ici : elles sont dans l'onglet Historique."
+                            ? " Ceux du centre précédent ne sont pas comptés ici : ils sont dans l'onglet Historique."
                             : ''
                     }${student.statut === 'Transféré' ? ' Fiche close : ce sont les appels faits dans ce centre avant le transfert.' : ''}`}
                 />
@@ -138,7 +138,7 @@ export default function StudentShow({ student, absences }: StudentShowProps) {
 
                             <div className="d-flex flex-wrap gap-2 mb-3">
                                 <span className="badge badge-soft-dark fs-13">{h.presencesTotal} appel(s)</span>
-                                {Object.entries(h.compteurs).map(([statut, n]) => (
+                                {compteursVisibles(h.compteurs).map(([statut, n]) => (
                                     <span key={statut} className={`badge badge-soft-${presenceVariant(statut)} fs-13`}>
                                         {statut} : {n}
                                     </span>

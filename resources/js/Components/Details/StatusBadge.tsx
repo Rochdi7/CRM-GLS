@@ -1,6 +1,6 @@
 interface StatusBadgeProps {
     label: string;
-    variant?: 'info' | 'success' | 'warning' | 'danger' | 'secondary' | 'primary' | 'dark';
+    variant?: 'info' | 'success' | 'warning' | 'danger' | 'secondary' | 'primary' | 'dark' | 'orange';
     /** Leading status dot, exactly as the PreSkool list pages render it. */
     dot?: boolean;
 }

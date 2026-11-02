@@ -1017,7 +1017,7 @@ export default function GroupsIndex({
                                             </button>
                                             <button
                                                 type="button"
-                                                className="badge badge-soft-secondary border-0 d-inline-flex align-items-center gap-1 fw-bold"
+                                                className="badge badge-soft-info border-0 d-inline-flex align-items-center gap-1 fw-bold"
                                                 title={STATS_SEGMENT_LABELS.changement}
                                                 onClick={() => openStudentsSegment(group, 'changement')}
                                             >
@@ -1042,17 +1042,6 @@ export default function GroupsIndex({
                                                 {group.inscriptionsArchiveesCount}
                                                 <i className="ti ti-archive" aria-hidden="true" />
                                             </button>
-                                            {group.inscriptionsAutresCount > 0 && (
-                                                <button
-                                                    type="button"
-                                                    className="badge badge-soft-info border-0 d-inline-flex align-items-center gap-1 fw-bold"
-                                                    title={STATS_SEGMENT_LABELS.autres}
-                                                    onClick={() => openStudentsSegment(group, 'autres')}
-                                                >
-                                                    {group.inscriptionsAutresCount}
-                                                    <i className="ti ti-dots" aria-hidden="true" />
-                                                </button>
-                                            )}
                                         </div>
                                     </td>
                                     <td>
