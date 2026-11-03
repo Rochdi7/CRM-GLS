@@ -29,6 +29,9 @@ class Depense extends Model implements HasMedia
      * "En attente" holds the money: the till is NOT debited until a
      * super-admin approves. Refusing never moves money at all.
      */
+    /** Media collection: proof of the TPE / virement payment, attached at approval. */
+    public const MEDIA_PREUVE_PAIEMENT = 'preuve_paiement';
+
     public const STATUT_EN_ATTENTE = 'En attente';
     public const STATUT_APPROUVEE = 'Approuvée';
     public const STATUT_REFUSEE = 'Refusée';
@@ -184,6 +187,12 @@ class Depense extends Model implements HasMedia
     public function registerMediaCollections(): void
     {
         $this->addMediaCollection('justificatifs')
+            ->acceptsMimeTypes(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
+
+        // Preuve du paiement TPE / virement envoyé (03/11/2026), jointe par
+        // l'APPROBATEUR au moment où l'argent sort du compte du centre —
+        // à part des justificatifs saisis par le demandeur.
+        $this->addMediaCollection(self::MEDIA_PREUVE_PAIEMENT)
             ->acceptsMimeTypes(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
     }
 

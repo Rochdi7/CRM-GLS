@@ -480,7 +480,16 @@ the database layer. Non-negotiable invariants already enforced in code:
     dépense by the whole account (it belongs to one centre), a till by the
     centre's share. `caisse:verifier-coherence` accepts a dépense only in
     its own centre's account of its own method. Rows older than the rule
-    keep their till. Tests:
+    keep their till. **Preuve de paiement** : à l'approbation d'une dépense
+    TPE / Virement, l'approbateur peut joindre la capture du virement / le
+    ticket TPE envoyé (`ApproveDepenseRequest`, média
+    `Depense::MEDIA_PREUVE_PAIEMENT` = `preuve_paiement`, à part des
+    `justificatifs` du demandeur, montré par « Preuve de paiement » sur la
+    fiche). OPTIONNELLE pour l'instant — la rendre obligatoire =
+    `ApproveDepenseRequest::PREUVE_OBLIGATOIRE = true`. Refusée (422) sur une
+    dépense en espèces ; jointe dans la MÊME transaction que le débit, donc
+    un échec d'envoi annule l'approbation. Le dialogue l'envoie en POST +
+    `_method=put` (un vrai PUT ne porte pas de fichier). Tests:
     `tests/Feature/Backoffice/Finance/DepenseMethodeCompteCentreTest.php`.
   - **remboursement**: ALWAYS the acting employee's physical till
     (`CaisseResolver::tillOf()`), whatever `methode_paiement` says — cash

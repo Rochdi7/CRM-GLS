@@ -475,11 +475,17 @@ export default function DepensesIndex({
     const [decisionError, setDecisionError] = useState<string | undefined>(undefined);
     const [decisionProcessing, setDecisionProcessing] = useState(false);
     const [motifRefus, setMotifRefus] = useState('');
+    // Preuve du paiement TPE / virement (03/11/2026) — optionnelle, jointe
+    // par l'approbateur ; ApproveDepenseRequest la refuse sur une dépense
+    // en espèces, d'où le champ dessiné seulement pour ces deux méthodes.
+    const [preuvePaiement, setPreuvePaiement] = useState<File | null>(null);
+    const decisionCompteCentre = decision !== null && ['TPE', 'Virement'].includes(decision.row.methodePaiement ?? '');
 
     function openDecision(type: 'approve' | 'refuse', row: DepenseRow) {
         setDecision({ type, row });
         setDecisionError(undefined);
         setMotifRefus('');
+        setPreuvePaiement(null);
     }
 
     function closeDecision() {
@@ -487,6 +493,7 @@ export default function DepensesIndex({
         setDecisionError(undefined);
         setDecisionProcessing(false);
         setMotifRefus('');
+        setPreuvePaiement(null);
     }
 
     function runDecision() {
@@ -496,18 +503,31 @@ export default function DepensesIndex({
         setDecisionProcessing(true);
         setDecisionError(undefined);
 
+        const options = {
+            preserveScroll: true,
+            onSuccess: () => closeDecision(),
+            onError: (errors: Record<string, string>) => {
+                setDecisionProcessing(false);
+                setDecisionError(Object.values(errors)[0] ?? "L'opération a échoué.");
+            },
+            onFinish: () => setDecisionProcessing(false),
+        };
+
+        // A file cannot ride a real PUT (PHP parses no multipart body there):
+        // POST + `_method` spoofing, the same route server-side.
+        if (type === 'approve' && preuvePaiement !== null) {
+            router.post(
+                `/backoffice/depenses/${row.id}/approve`,
+                { _method: 'put', preuve_paiement: preuvePaiement },
+                { ...options, forceFormData: true },
+            );
+            return;
+        }
+
         router.put(
             `/backoffice/depenses/${row.id}/${type === 'approve' ? 'approve' : 'refuse'}`,
             type === 'refuse' ? { motif_refus: motifRefus } : {},
-            {
-                preserveScroll: true,
-                onSuccess: () => closeDecision(),
-                onError: (errors) => {
-                    setDecisionProcessing(false);
-                    setDecisionError(Object.values(errors)[0] ?? "L'opération a échoué.");
-                },
-                onFinish: () => setDecisionProcessing(false),
-            },
+            options,
         );
     }
 
@@ -2424,7 +2444,9 @@ export default function DepensesIndex({
                 title={decision?.type === 'approve' ? 'Approuver la depense' : 'Refuser la depense'}
                 message={
                     decision?.type === 'approve'
-                        ? 'La caisse sera debitee immediatement de ce montant.'
+                        ? (decision.row.caisse
+                            ? `Le compte « ${decision.row.caisse} » sera débité immédiatement de ce montant.`
+                            : 'La caisse sera debitee immediatement de ce montant.')
                         : 'Aucun montant ne sera debite. La depense restera visible comme refusee.'
                 }
                 recordLabel={
@@ -2443,6 +2465,24 @@ export default function DepensesIndex({
                 confirmLabel={decision?.type === 'approve' ? 'Approuver' : 'Refuser'}
                 processingLabel={decision?.type === 'approve' ? 'Approbation...' : 'Refus...'}
             >
+                {decision?.type === 'approve' && decisionCompteCentre && (
+                    <div className="mb-3">
+                        <label className="form-label" htmlFor="dep-preuve-paiement">
+                            {t('Proof of payment (optional)')}
+                        </label>
+                        <input
+                            id="dep-preuve-paiement"
+                            type="file"
+                            accept={justificatifMimes.map((m) => `.${m}`).join(',')}
+                            className="form-control"
+                            onChange={(e) => setPreuvePaiement(e.target.files?.[0] ?? null)}
+                        />
+                        <div className="form-text">
+                            {t('Screenshot of the transfer or TPE slip sent to the payee.')}{' '}
+                            Formats acceptés : {justificatifMimes.join(', ')} - max {Math.round(justificatifMaxKb / 1024)} Mo
+                        </div>
+                    </div>
+                )}
                 {decision?.type === 'refuse' && (
                     <TextareaField
                         id="dep-motif-refus"

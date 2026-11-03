@@ -82,10 +82,20 @@ export default function InscriptionsBilanChart({ data, width }: InscriptionsBila
     const yFor = (v: number) => zeroY - v * pxPerUnit;
 
     const slot = plotWidth / Math.max(1, count);
-    const clusterWidth = Math.min(slot * 0.8, SERIES.length * 12);
-    const barWidth = Math.max(1.5, clusterWidth / SERIES.length);
+    // Gap between two bars of the same bucket (dataviz: 2px surface gap).
+    const BAR_GAP = slot >= 40 ? 2 : 0;
+    const barWidth = Math.max(1.5, Math.min(14, (slot * 0.8 - BAR_GAP * (SERIES.length - 1)) / SERIES.length));
     const xCenter = (i: number) => PAD_LEFT + slot * i + slot / 2;
-    const xBar = (i: number, s: number) => xCenter(i) - clusterWidth / 2 + s * barWidth;
+    // Only the series that HAVE a value in the bucket are drawn, and that
+    // group is centred on the date: reserving a place for every series left
+    // the bars off their label, with holes where a series was 0 (03/11/2026).
+    const visibles = (i: number): SerieKey[] => SERIES.filter((s) => value(s.key, i) > 0).map((s) => s.key);
+    const xBar = (i: number, key: SerieKey) => {
+        const keys = visibles(i);
+        const groupWidth = keys.length * barWidth + (keys.length - 1) * BAR_GAP;
+
+        return xCenter(i) - groupWidth / 2 + keys.indexOf(key) * (barWidth + BAR_GAP);
+    };
     const labelStep = Math.max(1, Math.ceil(44 / slot));
     const ticks = Array.from({ length: upTicks + downTicks + 1 }, (_, k) => (upTicks - k) * step);
 
@@ -124,11 +134,11 @@ export default function InscriptionsBilanChart({ data, width }: InscriptionsBila
 
                 {data.counts.map((_, i) => (
                     <g key={`cluster-${i}`} opacity={hoverIndex === null || hoverIndex === i ? 1 : 0.45}>
-                        {SERIES.map((serie, s) => {
+                        {SERIES.map((serie) => {
                             const v = value(serie.key, i);
                             if (v <= 0) return null;
                             const h = v * pxPerUnit;
-                            const x = xBar(i, s);
+                            const x = xBar(i, serie.key);
                             if (serie.key === 'nouvelles') {
                                 // Solid = still Active today, faded = since closed.
                                 const actives = Math.min(v, bilan.actives[i] ?? 0);

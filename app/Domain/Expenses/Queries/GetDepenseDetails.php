@@ -85,6 +85,13 @@ final class GetDepenseDetails
                 'mimeType' => (string) $media->mime_type,
                 'size' => (int) $media->size,
             ])->values()->all(),
+            // Preuve du paiement TPE / virement jointe à l'approbation.
+            'preuvesPaiement' => $depense->getMedia(Depense::MEDIA_PREUVE_PAIEMENT)->map(fn ($media): array => [
+                'name' => $media->file_name,
+                'url' => $media->getUrl(),
+                'mimeType' => (string) $media->mime_type,
+                'size' => (int) $media->size,
+            ])->values()->all(),
         ];
     }
 

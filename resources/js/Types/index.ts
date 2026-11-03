@@ -727,6 +727,8 @@ export interface DepenseDetails {
     note: string | null;
     canViewList: boolean;
     receipts: SafeMediaFile[];
+    /** Proof of the TPE / virement payment, attached at approval. */
+    preuvesPaiement: SafeMediaFile[];
     statut: string;
     methodePaiement: string | null;
     referenceFacture: string | null;

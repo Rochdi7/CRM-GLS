@@ -22,6 +22,7 @@ use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
 use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
 use App\Http\Controllers\Backoffice\Concerns\ResolvesPaiementProfCalcul;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Backoffice\Depenses\ApproveDepenseRequest;
 use App\Http\Requests\Backoffice\Depenses\StoreDepenseRequest;
 use App\Http\Requests\Backoffice\Depenses\UpdateDepenseRequest;
 use App\Models\DemandeRemboursement;
@@ -473,12 +474,25 @@ final class DepenseController extends Controller
      * Approve a pending expense — THIS is where the till is debited
      * (Domain\Expenses\Actions\ApprouverDepense).
      */
-    public function approve(Request $request, Depense $depense, ApprouverDepense $action): RedirectResponse
+    public function approve(ApproveDepenseRequest $request, Depense $depense, ApprouverDepense $action): RedirectResponse
     {
         $this->authorize('approve', $depense);
         $this->assertDepenseInContext($request, $depense);
 
-        $action->handle($depense, $this->actingEmployee($request));
+        // The optional proof of a TPE / Virement payment (ApproveDepenseRequest)
+        // is attached in the SAME transaction as the debit: a failed upload
+        // rolls the approval back rather than leaving money moved with a
+        // proof the approver believes was saved.
+        DB::transaction(function () use ($request, $depense, $action): void {
+            $approuvee = $action->handle($depense, $this->actingEmployee($request));
+
+            $preuve = $request->file('preuve_paiement');
+            if ($preuve !== null) {
+                $approuvee->addMedia($preuve->getRealPath())
+                    ->usingFileName($approuvee->id.'-preuve-'.$preuve->getClientOriginalName())
+                    ->toMediaCollection(Depense::MEDIA_PREUVE_PAIEMENT);
+            }
+        });
 
         // ⚠ JAMAIS `redirect()->route(...)` nu ici (§5). Sans la query string
         // du referer, `tab` et surtout `dateFrom`/`dateTo` disparaissent :

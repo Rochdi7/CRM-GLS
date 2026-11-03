@@ -216,6 +216,24 @@ export default function DepenseShow({ depense, canAudit, recalculUrl, calculAper
                         </div>
                     </Card>
 
+                    {/* Preuve du paiement TPE / virement envoyé, jointe à
+                        l'approbation (03/11/2026). Affichée seulement si elle
+                        existe : elle reste optionnelle pour l'instant. */}
+                    {depense.preuvesPaiement.length > 0 && (
+                        <Card
+                            title={t('Proof of payment')}
+                            tools={<span className="badge badge-soft-success">{depense.preuvesPaiement.length}</span>}
+                        >
+                            <div className="row g-3">
+                                {depense.preuvesPaiement.map((file) => (
+                                    <div className="col-md-4 col-sm-6" key={file.url}>
+                                        <DocumentLink file={file} />
+                                    </div>
+                                ))}
+                            </div>
+                        </Card>
+                    )}
+
                     <Card
                         title="Justificatifs"
                         tools={<span className="badge badge-soft-secondary">{depense.receipts.length}</span>}

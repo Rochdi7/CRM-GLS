@@ -17,7 +17,9 @@ use App\Services\Context\CurrentContext;
 use App\Support\Settings\AppSettings;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 /**
@@ -265,5 +267,86 @@ final class DepenseMethodeCompteCentreTest extends TestCase
         ]);
         Artisan::call('caisse:verifier-coherence');
         $this->assertStringContainsString($depense->reference, Artisan::output());
+    }
+
+    // ── Preuve de paiement jointe à l'approbation (03/11/2026) ──────────
+
+    private function approveWithProof(Depense $depense, UploadedFile $file): \Illuminate\Testing\TestResponse
+    {
+        $this->actingAs($this->superAdmin());
+        app(CurrentContext::class)->setEtablissement(null);
+
+        return $this->post(route('backoffice.depenses.approve', $depense), [
+            '_method' => 'put',
+            'preuve_paiement' => $file,
+        ]);
+    }
+
+    public function test_the_approver_may_attach_the_proof_of_a_virement_payment(): void
+    {
+        Storage::fake('media');
+        $user = $this->cashier();
+        $compte = $this->compte($this->online, Encaissement::METHODE_VIREMENT);
+        $compte->update(['solde' => '500.00']);
+        $depense = $this->keyIn($user, $this->online);
+
+        $this->approveWithProof($depense, UploadedFile::fake()->image('virement.jpg'))->assertSessionHasNoErrors();
+
+        $depense->refresh();
+        $this->assertSame(Depense::STATUT_APPROUVEE, $depense->statut);
+        $this->assertSame('200.00', (string) $compte->fresh()->solde);
+        $this->assertCount(1, $depense->getMedia(Depense::MEDIA_PREUVE_PAIEMENT));
+        // Kept apart from the requester's receipts.
+        $this->assertCount(0, $depense->getMedia('justificatifs'));
+    }
+
+    public function test_the_proof_is_optional(): void
+    {
+        $user = $this->cashier();
+        $this->compte($this->online, Encaissement::METHODE_TPE)->update(['solde' => '500.00']);
+        $depense = $this->keyIn($user, $this->online, ['methode_paiement' => Encaissement::METHODE_TPE]);
+
+        $this->approve($depense)->assertSessionHasNoErrors();
+        $this->assertSame(Depense::STATUT_APPROUVEE, $depense->fresh()->statut);
+    }
+
+    public function test_a_proof_is_refused_on_a_cash_depense_and_nothing_moves(): void
+    {
+        Storage::fake('media');
+        $user = $this->cashier();
+        $till = $user->employee->till()->firstOrFail();
+        $till->update(['solde' => '1000.00']);
+        $depense = $this->keyIn($user, $this->rabat, ['methode_paiement' => Encaissement::METHODE_ESPECES]);
+
+        $this->approveWithProof($depense, UploadedFile::fake()->image('recu.jpg'))->assertSessionHasErrors('preuve_paiement');
+
+        $this->assertTrue($depense->fresh()->isEnAttente());
+        $this->assertSame('1000.00', (string) $till->fresh()->solde);
+    }
+
+    public function test_a_proof_of_the_wrong_type_is_refused_and_nothing_moves(): void
+    {
+        Storage::fake('media');
+        $user = $this->cashier();
+        $compte = $this->compte($this->online, Encaissement::METHODE_VIREMENT);
+        $compte->update(['solde' => '500.00']);
+        $depense = $this->keyIn($user, $this->online);
+
+        $this->approveWithProof($depense, UploadedFile::fake()->create('script.exe', 10))->assertSessionHasErrors('preuve_paiement');
+
+        $this->assertTrue($depense->fresh()->isEnAttente());
+        $this->assertSame('500.00', (string) $compte->fresh()->solde);
+    }
+
+    public function test_the_detail_page_serves_the_proof(): void
+    {
+        Storage::fake('media');
+        $user = $this->cashier();
+        $this->compte($this->online, Encaissement::METHODE_VIREMENT)->update(['solde' => '500.00']);
+        $depense = $this->keyIn($user, $this->online);
+        $this->approveWithProof($depense, UploadedFile::fake()->image('virement.png'))->assertSessionHasNoErrors();
+
+        $this->get(route('backoffice.depenses.show', $depense))
+            ->assertInertia(fn ($page) => $page->has('depense.preuvesPaiement', 1));
     }
 }
