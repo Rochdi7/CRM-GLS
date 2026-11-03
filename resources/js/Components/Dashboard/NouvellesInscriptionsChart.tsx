@@ -310,12 +310,7 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
             <div className="card-body">
                 <div className="position-relative" ref={containerRef} style={{ opacity: loading ? 0.5 : 1 }}>
                     {view === 'bilan' ? (
-                        <>
-                            <p className="text-muted fs-13 mb-2">
-                                {t('Gained: new registrations. Lost: cancelled, archived and deleted registrations.')}
-                            </p>
-                            <InscriptionsBilanChart data={data} width={WIDTH} />
-                        </>
+                        <InscriptionsBilanChart data={data} width={WIDTH} />
                     ) : (
                     <>
                     <svg
