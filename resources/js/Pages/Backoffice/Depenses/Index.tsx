@@ -332,6 +332,9 @@ export default function DepensesIndex({
     }));
 
     const depenseForm = useForm<DepenseFormState>(emptyDepenseForm());
+    // Mirrors CaisseResolver::METHODES_DEPENSE_COMPTE_CENTRE — display hint
+    // only, the server decides the account.
+    const debiteCompteCentre = ['TPE', 'Virement'].includes(depenseForm.data.methode_paiement);
     const remboursementForm = useForm<RemboursementFormState>(emptyRemboursementForm());
 
     function reload(nextFilters: Partial<typeof filters>) {
@@ -1311,6 +1314,22 @@ export default function DepensesIndex({
                 >
                     <div className="px-3 pt-2">
                         <TableToolbar onReset={filterReset.reset} resetActive={filterReset.active}>
+                            {/* Statut (03/11/2026) — always shown here, even
+                                with approval off: a paiement prof can still be
+                                « Annulée ». Same server-side `statutFilter`
+                                as the Dépenses tab. */}
+                            <div style={{ width: 200 }}>
+                                <label className="form-label" htmlFor="prof-f-statut">
+                                    Statut
+                                </label>
+                                <SelectField
+                                    id="prof-f-statut"
+                                    options={depenseStatuts.map((st) => ({ value: st, label: st }))}
+                                    placeholder="Tous les statuts"
+                                    value={filters.statutFilter}
+                                    onChange={(event) => reload({ statutFilter: event.target.value })}
+                                />
+                            </div>
                             <div style={{ width: 170 }}>
                                 <label className="form-label" htmlFor="prof-f-du">
                                     Du
@@ -1911,7 +1930,10 @@ export default function DepensesIndex({
                             </a>
                         </div>
                     )}
-                    {!editingDepense && soldeActuel !== null && (
+                    {/* TPE / Virement leave the CENTRE's account for that method
+                        (CaisseResolver::forDepense, 03/11/2026) — the till balance
+                        below would then describe an account nothing debits. */}
+                    {!editingDepense && soldeActuel !== null && !debiteCompteCentre && (
                         <div className="alert alert-info">
                             <div className="d-flex justify-content-between align-items-center">
                                 <span>
@@ -2034,6 +2056,13 @@ export default function DepensesIndex({
                                 onChange={(e) => depenseForm.setData('methode_paiement', e.target.value)}
                                 error={depenseForm.errors.methode_paiement}
                             />
+                            {depenseForm.data.methode_paiement !== '' && (
+                                <div className="form-text">
+                                    {debiteCompteCentre
+                                        ? t('Debited from the :methode account of the centre of this expense.', { methode: depenseForm.data.methode_paiement })
+                                        : t('Debited from the cash till of the employee who records the request.')}
+                                </div>
+                            )}
                         </div>
                         <div className="col-md-4">
                             <DateField

@@ -9,6 +9,7 @@ use App\Models\Depense;
 use App\Models\Employee;
 use App\Models\Group;
 use App\Domain\Finance\Support\CaisseLedger;
+use App\Domain\Finance\Support\CaisseResolver;
 use App\Domain\Finance\Support\GardeSoldeCaisse;
 use App\Domain\Payroll\Support\CotisationCnss;
 use App\Services\Context\CurrentContext;
@@ -43,6 +44,7 @@ final class EnregistrerDepense
         private readonly CaisseLedger $ledger,
         private readonly CurrentContext $context,
         private readonly GardeSoldeCaisse $garde,
+        private readonly CaisseResolver $resolver,
     ) {}
 
     /**
@@ -69,6 +71,18 @@ final class EnregistrerDepense
                 ? Group::query()->whereKey($data['group_id'])->value('etablissement_id')
                 : null;
             $etablissementId ??= $this->context->etablissementId() ?? $agent->etablissement_id;
+            $etablissementId = $etablissementId === null ? null : (int) $etablissementId;
+
+            // The account debited follows `methode_paiement` (03/11/2026,
+            // CaisseResolver::forDepense): TPE / Virement → THIS centre's
+            // account for that method; Espèces → the till of the employee
+            // keying it (the one the caller passed, else resolved here).
+            // Stored now and immutable while decided, so approval debits
+            // exactly this row — never one re-derived from the approver.
+            $methode = $data['methode_paiement'] ?? null;
+            if (in_array($methode, CaisseResolver::METHODES_DEPENSE_COMPTE_CENTRE, true) || ! isset($data['caisse_id'])) {
+                $data['caisse_id'] = $this->resolver->forDepense($agent, $methode, $etablissementId)->id;
+            }
 
             // L'enseignant PAYÉ (23/09/2026) : celui que le calcul a désigné,
             // sinon le prof ACTUEL du groupe pour une saisie à la main. Figé
@@ -106,8 +120,10 @@ final class EnregistrerDepense
                     self::MESSAGE_SOLDE_INSUFFISANT,
                     'montant',
                     // The CENTRE's share of the till, not the whole drawer —
-                    // same bound as ApprouverDepense (GardeSoldeCaisse).
-                    $etablissementId === null ? null : (int) $etablissementId,
+                    // same bound as ApprouverDepense (GardeSoldeCaisse). A
+                    // TPE / Virement account belongs to ONE centre: bounded
+                    // by its whole balance.
+                    in_array($methode, CaisseResolver::METHODES_DEPENSE_COMPTE_CENTRE, true) ? null : $etablissementId,
                 );
             }
 

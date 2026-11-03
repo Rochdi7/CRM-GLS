@@ -36,8 +36,9 @@ use Tests\TestCase;
  *  - Espèces → the cashier's physical till;
  *  - TPE / Chèque / Virement → the centre's account for that method,
  *    and NEVER the physical till;
- *  - dépenses and remboursements always debit the physical till, whatever
- *    label they carry (accounting rule: cash settles them);
+ *  - a dépense leaves the account of its method (03/11/2026): TPE /
+ *    Virement → its centre's account, Espèces → the physical till
+ *    (DepenseMethodeCompteCentreTest); remboursements debit the till;
  *  - a till transfer moves cash between cash accounts only;
  *  - nothing is derived on top of the stored balances any more.
  */
@@ -470,26 +471,28 @@ final class ComptesMethodeTest extends TestCase
         $this->assertSame('1000.00', (string) $compteTpe->fresh()->solde);
     }
 
-    // ── Dépenses & remboursements: always the physical till ──────────────
+    // ── Dépenses (by method) & remboursements (physical till) ────────────
 
-    public function test_an_expense_always_debits_the_cashiers_till_whatever_its_label(): void
+    public function test_a_virement_expense_debits_the_centres_virement_account_not_the_till(): void
     {
         AppSettings::setBool(AppSettings::EXPENSE_APPROVAL, false);
         $user = $this->userWith('expenses.view', 'expenses.create');
         $type = TypeDepense::create(['nom' => 'Fournitures', 'is_system' => false, 'statut' => 'Actif']);
         $till = $user->employee->caisses()->first();
-        // The till must hold what it spends (GardeSoldeCaisse, 09/09/2026).
+        // The account must hold what it spends (GardeSoldeCaisse, 09/09/2026).
         // What this test pins is WHICH account moves, not by how much.
         $till->update(['solde' => '1000.00']);
+        $compte = $this->compte($this->centre, Encaissement::METHODE_VIREMENT);
+        $compte->update(['solde' => '1000.00']);
 
         $this->actingAs($user)->post(route('backoffice.depenses.store'), [
             'type_depense_id' => $type->id, 'montant' => '300', 'methode_paiement' => Encaissement::METHODE_VIREMENT,
             'date_depense' => '2025-09-22', 'description' => 'Test',
         ])->assertSessionHasNoErrors();
 
-        $this->assertSame('700.00', (string) $till->fresh()->solde);
-        $this->assertSame($till->id, Depense::query()->firstOrFail()->caisse_id);
-        $this->assertSame('0.00', (string) $this->compte($this->centre, Encaissement::METHODE_VIREMENT)->solde);
+        $this->assertSame('1000.00', (string) $till->fresh()->solde);
+        $this->assertSame($compte->id, Depense::query()->firstOrFail()->caisse_id);
+        $this->assertSame('700.00', (string) $compte->fresh()->solde);
     }
 
     public function test_a_refund_always_debits_the_cashiers_till(): void

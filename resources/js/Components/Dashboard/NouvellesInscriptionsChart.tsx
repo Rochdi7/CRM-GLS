@@ -247,7 +247,7 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
                             }`}
                         >
                             <i className={`ti ${solde > 0 ? 'ti-trending-up' : solde < 0 ? 'ti-trending-down' : 'ti-minus'}`} />
-                            {t('Balance')} : {solde > 0 ? '+' : ''}
+                            {t('Net result')} : {solde > 0 ? '+' : ''}
                             {solde.toLocaleString('fr-FR')}
                         </span>
                     ) : (

@@ -444,12 +444,11 @@ final class DepenseController extends Controller
             $this->assertPaiementProfGroupInContext($request, Group::findOrFail((int) $request->validated('group_id')));
         }
 
-        // A dépense is ALWAYS debited from the acting employee's own physical
-        // till — never chosen client-side, and NOT routed by
-        // `methode_paiement` (that field is descriptive only: the till is
-        // what settles an expense, accounting rule confirmed 24/08/2026).
-        // Same self-heal as EncaissementController for pre-provisioner
-        // accounts.
+        // Espèces → the acting employee's own physical till (never chosen
+        // client-side; same self-heal as EncaissementController). TPE /
+        // Virement → EnregistrerDepense replaces it with the dépense's CENTRE
+        // account for that method (CaisseResolver::forDepense, 03/11/2026 —
+        // the 24/08/2026 « always the till » rule is retired).
         $caisse = app(CaisseResolver::class)->tillOf($employee);
 
         $payload = collect($request->validated())
@@ -794,7 +793,17 @@ final class DepenseController extends Controller
             $payload['calcul_ajustements'] = null;
         }
 
-        // caisse_id is absent from $payload by construction and montant is
+        // The account follows the method (CaisseResolver::forDepense,
+        // 03/11/2026). PENDING: nothing was debited yet, so a new method — or
+        // a new group, i.e. a new centre — simply re-points `caisse_id`.
+        // DECIDED: the money already left the stored account; switching the
+        // method to one that settles elsewhere is refused, never applied as a
+        // label over money that stays put. An unchanged method never trips
+        // this (rows older than the rule keep their till).
+        $payload = $this->repointerCaisseSelonMethode($request, $depense, $payload);
+
+        // caisse_id never comes from the client (only the server re-pointing
+        // above, on a PENDING row) and montant is
         // stripped above: an amount change goes ONLY through
         // CorrigerMontantDepense (difference debited/credited on the stored
         // till when approved), in the same transaction as the other fields.
@@ -813,6 +822,56 @@ final class DepenseController extends Controller
         $this->storeJustificatifs($request, $depense);
 
         return $this->backToDepensesList($request, $depense)->with('success', __('Expense updated.'));
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @return array<string, mixed>
+     */
+    private function repointerCaisseSelonMethode(Request $request, Depense $depense, array $payload): array
+    {
+        $methode = array_key_exists('methode_paiement', $payload) ? $payload['methode_paiement'] : $depense->methode_paiement;
+        $methodeChangee = $methode !== $depense->methode_paiement;
+        $groupId = array_key_exists('group_id', $payload) ? $payload['group_id'] : $depense->group_id;
+        $groupeChange = (int) ($groupId ?? 0) !== (int) ($depense->group_id ?? 0);
+
+        if (! $methodeChangee && ! $groupeChange) {
+            return $payload;
+        }
+
+        // The employee who KEYED the dépense owns the till an Espèces row
+        // debits — never the editor.
+        $createur = \App\Models\Employee::query()->find($depense->agent_id) ?? $this->actingEmployee($request);
+        $centreId = $groupId !== null
+            ? Group::query()->whereKey($groupId)->value('etablissement_id')
+            : null;
+        $centreId ??= $depense->etablissement_id ?? $depense->caisse?->etablissement_id;
+
+        $caisse = app(CaisseResolver::class)->forDepense(
+            $createur,
+            $methode,
+            $centreId === null ? null : (int) $centreId,
+        );
+
+        if ((int) $caisse->id === (int) $depense->caisse_id) {
+            return $payload;
+        }
+
+        if (! $depense->isEnAttente()) {
+            // A method change on a decided row would move the label, not the
+            // money. Group change alone on a decided row keeps its account.
+            if (! $methodeChangee) {
+                return $payload;
+            }
+
+            throw ValidationException::withMessages([
+                'methode_paiement' => __('This expense has already been decided: its payment method can no longer change the account debited.'),
+            ]);
+        }
+
+        $payload['caisse_id'] = $caisse->id;
+
+        return $payload;
     }
 
     /**

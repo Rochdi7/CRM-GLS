@@ -420,8 +420,10 @@ the database layer. Non-negotiable invariants already enforced in code:
   centre principal, restait INVISIBLE sur Online (l'écran où elle venait
   d'être créée) et n'y était donc pas approuvable ; l'approbation stampait en
   plus le centre principal du créateur dans le ledger. Trois bornes :
-  (1) **le tiroir débité ne change PAS** — c'est toujours
-  `CaisseResolver::tillOf()`, un seul par employé ; c'est l'IMPUTATION qui
+  (1) **le tiroir débité ne change PAS** — en Espèces c'est toujours
+  `CaisseResolver::tillOf()`, un seul par employé (en TPE / Virement, le
+  compte de la méthode du centre de la dépense depuis le 03/11/2026,
+  `CaisseResolver::forDepense()`) ; c'est l'IMPUTATION qui
   suit le centre actif, exactement comme un encaissement ; (2) **la règle a
   DEUX formes et une seule définition** — `Depense::centreId()` (PHP : policy,
   garde de contexte, fiche) et `VentilationCentre::scopeDepensesAuCentre()` /
@@ -462,15 +464,33 @@ the database layer. Non-negotiable invariants already enforced in code:
     the ACTIVE-CONTEXT centre's account for that method (fallback: the
     agent's primary centre; the legacy import passes its batch centre). The
     physical till NEVER moves for a non-cash payment.
-  - **dépense / remboursement**: ALWAYS the acting employee's physical till
+  - **dépense** (ordinary AND « Paiement prof ») **routes by
+    `methode_paiement`** (03/11/2026, owner's decision — replaces the
+    24/08/2026 « always the till » rule), via ONE definition,
+    `CaisseResolver::forDepense()`: **TPE / Virement** → that method's
+    account of the DÉPENSE's centre (group centre, else
+    `depenses.etablissement_id` — never the approver's context);
+    **Espèces** (and Chèque, which has no outgoing account) → the physical
+    till of the employee who KEYED the request, never the approver's. The
+    account is resolved in `EnregistrerDepense` and stored as `caisse_id`;
+    approval debits that stored row. A PENDING dépense whose method or group
+    changes is re-pointed (`DepenseController::repointerCaisseSelonMethode`
+    — nothing was debited); a DECIDED one refuses a method change that
+    would switch accounts (422). `GardeSoldeCaisse` bounds a TPE / Virement
+    dépense by the whole account (it belongs to one centre), a till by the
+    centre's share. `caisse:verifier-coherence` accepts a dépense only in
+    its own centre's account of its own method. Rows older than the rule
+    keep their till. Tests:
+    `tests/Feature/Backoffice/Finance/DepenseMethodeCompteCentreTest.php`.
+  - **remboursement**: ALWAYS the acting employee's physical till
     (`CaisseResolver::tillOf()`), whatever `methode_paiement` says — cash
-    settles them (accounting rule confirmed 24/08/2026). Never route these
-    by method. ONE exception, `CaisseResolver::forRemboursement()`: a refund
+    settles it (accounting rule confirmed 24/08/2026). ONE exception,
+    `CaisseResolver::forRemboursement()`: a refund
     linked to a payment funded by a chèque now **Rejeté** reverses the
     centre's Chèque account (that money never reached the till). And since
     02/11/2026 an APPROVED refund request may leave the centre's TPE /
     Virement account — super-admin's choice only, see « Un remboursement
-    est une DEMANDE » below. A dépense still never routes by method.
+    est une DEMANDE » below.
   - **transfers** move cash between cash accounts only
     (`DemanderTransfertCaisse` / `ValiderTransfertCaisse` refuse a method
     account; `caisseOptions()` never offers one).
@@ -499,9 +519,9 @@ the database layer. Non-negotiable invariants already enforced in code:
   in a till are re-homed by `php artisan caisse:recalculer-soldes` (dry-run by
   default, `--apply`, both legs journaled through `CaisseLedger`; refuses
   ambiguous rows unless `--ambiguous=caisse|student`) — **encaissements
-  only**: it never touches a dépense or a remboursement (they always settle
-  from the till, see above; the 24/08/2026 audit removed a branch that moved
-  them). Never run it on production without reading its dry-run output
+  only**: it never touches a dépense or a remboursement (their account is
+  decided at creation, see above; the 24/08/2026 audit removed a branch that
+  moved them). Never run it on production without reading its dry-run output
   first. `php artisan caisse:verifier-coherence` is the READ-ONLY auditor
   (mis-routed rows, duplicate/missing accounts, tills per employee,
   solde vs journaled movements; `--strict` fails on warnings) — run it

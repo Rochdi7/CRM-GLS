@@ -6,6 +6,7 @@ namespace App\Domain\Expenses\Actions;
 
 use App\Domain\Finance\Support\CaisseLedger;
 use App\Domain\Finance\Support\GardeSoldeCaisse;
+use App\Models\Caisse;
 use App\Models\Depense;
 use App\Models\Employee;
 use Illuminate\Support\Facades\DB;
@@ -91,7 +92,8 @@ final class CorrigerMontantDepense
                         $delta,
                         self::MESSAGE_SOLDE_INSUFFISANT,
                         'montant',
-                        $centreId,
+                        // A TPE / Virement account belongs to ONE centre.
+                        in_array(Caisse::query()->whereKey($locked->caisse_id)->value('type'), Caisse::TYPES_METHODE, true) ? null : $centreId,
                     );
                     $this->ledger->debit((int) $locked->caisse_id, $delta, $motif, $locked, $extra);
                 } else {

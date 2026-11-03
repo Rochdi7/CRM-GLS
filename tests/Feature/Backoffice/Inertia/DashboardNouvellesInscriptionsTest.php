@@ -543,9 +543,9 @@ final class DashboardNouvellesInscriptionsTest extends TestCase
                 ->where('nouvellesInscriptions.bilan.actives.10', 3)
                 ->where('nouvellesInscriptions.bilan.annulees.10', 1)
                 ->where('nouvellesInscriptions.bilan.archivees.10', 1)
-                ->where('nouvellesInscriptions.bilan.changements.10', 1)
+                ->missing('nouvellesInscriptions.bilan.changements')
                 ->where('nouvellesInscriptions.bilan.supprimees.10', 1)
-                // 4 new − 1 cancelled − 1 archived − 1 deleted; a group change is neutral.
+                // 4 new − 1 cancelled − 1 archived − 1 deleted; a group change is left out entirely.
                 ->where('nouvellesInscriptions.bilan.solde.10', 1)
                 ->where('nouvellesInscriptions.bilan.totaux.solde', 1));
     }

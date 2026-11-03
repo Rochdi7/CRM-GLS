@@ -92,6 +92,40 @@ final class CaisseResolver
         return $this->tillOf($agent);
     }
 
+    /** Methods for which a dépense leaves the CENTRE's account, not the till. */
+    public const METHODES_DEPENSE_COMPTE_CENTRE = [
+        Encaissement::METHODE_TPE,
+        Encaissement::METHODE_VIREMENT,
+    ];
+
+    /**
+     * The account a DÉPENSE (ordinary or « Paiement prof ») debits — decided
+     * once at creation and stored as `depenses.caisse_id` (03/11/2026, owner's
+     * decision; replaces the 24/08/2026 « always the till » rule):
+     *
+     *  - TPE / Virement → the account of that method of the dépense's OWN
+     *    centre (group centre for a paiement prof, else the centre it was
+     *    keyed in) — never the approver's context;
+     *  - Espèces (and Chèque, which has no outgoing account) → the physical
+     *    till of the employee who KEYED the request, never the approver's.
+     */
+    public function forDepense(Employee $agent, ?string $methode, ?int $centreId): Caisse
+    {
+        if (! in_array($methode, self::METHODES_DEPENSE_COMPTE_CENTRE, true)) {
+            return $this->tillOf($agent);
+        }
+
+        $centreId ??= $agent->etablissement_id === null ? null : (int) $agent->etablissement_id;
+
+        if ($centreId === null) {
+            throw ValidationException::withMessages([
+                'methode_paiement' => __('Select a centre in the top bar before recording a non-cash payment.'),
+            ]);
+        }
+
+        return $this->provisioner->compteMethodeFor($centreId, (string) $methode);
+    }
+
     /**
      * The employee's physical till (Espèces) — type « Caissière » ONLY.
      *

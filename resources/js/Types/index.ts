@@ -266,13 +266,12 @@ export type NouvellesInscriptionsDuree = 'jour' | '7j' | '1m' | '12m' | 'periode
 /**
  * « Bilan » view of the same chart (03/11/2026) — per bucket, aligned on
  * `keys`: what happened to inscriptions. `solde` = nouvelles − annulées −
- * archivées − supprimées (computed server-side; a group change is neutral).
+ * archivées − supprimées (computed server-side; group changes are left out).
  */
 export interface NouvellesInscriptionsBilan {
     /** Of the bucket's new registrations, how many are still Active. */
     actives: number[];
     annulees: number[];
-    changements: number[];
     archivees: number[];
     supprimees: number[];
     solde: number[];
@@ -280,7 +279,6 @@ export interface NouvellesInscriptionsBilan {
         nouvelles: number;
         actives: number;
         annulees: number;
-        changements: number;
         archivees: number;
         supprimees: number;
         solde: number;

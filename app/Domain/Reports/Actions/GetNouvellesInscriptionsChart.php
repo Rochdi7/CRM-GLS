@@ -62,15 +62,16 @@ use Illuminate\Support\Facades\DB;
  * window, same buckets, and for each bucket WHAT HAPPENED to inscriptions:
  *  - `nouvelles` = the bars above (same query), `actives` = how many of those
  *    are still Active today;
- *  - `annulees` / `changements` / `archivees` = statut TRANSITIONS dated by
+ *  - `annulees` / `archivees` = statut TRANSITIONS dated by
  *    the journal entry (`activity_log`, event `updated`, new statut ≠ old) —
  *    the moment the gesture was made, not the dossier's date. A legacy row
  *    IMPORTED already « Annulée » is an `created` entry and is not counted:
  *    nobody cancelled anything that day;
  *  - `supprimees` = `deleted` journal entries (append-only, so a deletion
  *    survives its row);
- *  - `solde` = nouvelles − annulées − archivées − supprimées. A group change
- *    is shown but NEUTRAL: the student stays, only the group moves.
+ *  - `solde` (« Résultat net » on screen) = nouvelles − annulées − archivées
+ *    − supprimées. A group change is NOT part of the bilan at all (owner,
+ *    03/11/2026): the student stays, only the group moves.
  * Centre of a journal entry = the inscription's current centre, or — once
  * deleted — the centre frozen in the entry's `old` attributes. One GROUP BY
  * on the journal, whatever the volume.
@@ -127,7 +128,7 @@ final class GetNouvellesInscriptionsChart
         }
 
         $counts = [];
-        $bilan = ['actives' => [], 'annulees' => [], 'changements' => [], 'archivees' => [], 'supprimees' => [], 'solde' => []];
+        $bilan = ['actives' => [], 'annulees' => [], 'archivees' => [], 'supprimees' => [], 'solde' => []];
         foreach ($keys as $key) {
             $nouvelles = (int) ($rows[$key]->total ?? 0);
             $ev = $events[$key] ?? null;
@@ -138,7 +139,6 @@ final class GetNouvellesInscriptionsChart
             $counts[] = $nouvelles;
             $bilan['actives'][] = (int) ($rows[$key]->actives ?? 0);
             $bilan['annulees'][] = $annulees;
-            $bilan['changements'][] = (int) ($ev->changements ?? 0);
             $bilan['archivees'][] = $archivees;
             $bilan['supprimees'][] = $supprimees;
             $bilan['solde'][] = $nouvelles - $annulees - $archivees - $supprimees;
@@ -148,7 +148,6 @@ final class GetNouvellesInscriptionsChart
             'nouvelles' => array_sum($counts),
             'actives' => array_sum($bilan['actives']),
             'annulees' => array_sum($bilan['annulees']),
-            'changements' => array_sum($bilan['changements']),
             'archivees' => array_sum($bilan['archivees']),
             'supprimees' => array_sum($bilan['supprimees']),
             'solde' => array_sum($bilan['solde']),
@@ -173,7 +172,7 @@ final class GetNouvellesInscriptionsChart
      * bucket (class docblock « BILAN »). Keyed by the bucket string.
      *
      * @param  'hour'|'day'|'month'  $unit
-     * @return Collection<string, object{annulees: int, changements: int, archivees: int, supprimees: int}>
+     * @return Collection<string, object{annulees: int, archivees: int, supprimees: int}>
      */
     private function evenements(Carbon $start, Carbon $end, string $unit): Collection
     {
@@ -196,14 +195,13 @@ final class GetNouvellesInscriptionsChart
                 ->where('a.event', 'deleted')
                 ->orWhere(fn (Builder $u) => $u
                     ->where('a.event', 'updated')
-                    ->whereRaw("{$nouveau} IN (?, ?, ?)", [Inscription::STATUT_ANNULEE, Inscription::STATUT_CHANGEMENT, Inscription::STATUT_ARCHIVEE])))
+                    ->whereRaw("{$nouveau} IN (?, ?)", [Inscription::STATUT_ANNULEE, Inscription::STATUT_ARCHIVEE])))
             ->when($centreId, fn (Builder $q) => $q->whereRaw(
                 "COALESCE(i.etablissement_id::text, a.attribute_changes->'old'->>'etablissement_id') = ?",
                 [(string) $centreId],
             ))
             ->selectRaw("{$bucket} AS bucket,
                 COUNT(*) FILTER (WHERE {$transition(Inscription::STATUT_ANNULEE)}) AS annulees,
-                COUNT(*) FILTER (WHERE {$transition(Inscription::STATUT_CHANGEMENT)}) AS changements,
                 COUNT(*) FILTER (WHERE {$transition(Inscription::STATUT_ARCHIVEE)}) AS archivees,
                 COUNT(*) FILTER (WHERE a.event = 'deleted') AS supprimees")
             ->groupByRaw($bucket)

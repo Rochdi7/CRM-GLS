@@ -15,17 +15,16 @@ const PAD_RIGHT = 12;
 const PAD_TOP = 16;
 const PAD_BOTTOM = 32;
 
-type SerieKey = 'nouvelles' | 'changements' | 'annulees' | 'archivees' | 'supprimees';
+type SerieKey = 'nouvelles' | 'annulees' | 'archivees' | 'supprimees';
 
 /**
  * Bars drawn per bucket, left → right. `up` ones rise from the zero line
  * (effort gained), the others hang below it (effort lost). A group change is
- * drawn UP but stays out of the solde: the student is kept, only the group
- * moves (GetNouvellesInscriptionsChart « BILAN »).
+ * NOT part of this view (owner, 03/11/2026): the student stays, it is neither
+ * a gain nor a loss.
  */
 const SERIES: { key: SerieKey; label: string; color: string; up: boolean }[] = [
     { key: 'nouvelles', label: 'Registrations: new', color: 'var(--gls-bilan-nouvelles)', up: true },
-    { key: 'changements', label: 'Registrations: group changes', color: 'var(--gls-bilan-changement)', up: true },
     { key: 'annulees', label: 'Registrations: cancelled', color: 'var(--gls-bilan-annulee)', up: false },
     { key: 'archivees', label: 'Registrations: archived', color: 'var(--gls-bilan-archivee)', up: false },
     { key: 'supprimees', label: 'Registrations: deleted', color: 'var(--gls-bilan-supprimee)', up: false },
@@ -42,6 +41,9 @@ function niceStep(max: number): number {
 }
 
 const signed = (v: number): string => (v > 0 ? `+${v.toLocaleString('fr-FR')}` : v.toLocaleString('fr-FR'));
+
+/** A loss reads « −1 »; nothing lost reads « 0 », never « −0 ». */
+const perte = (v: number): string => (v > 0 ? `−${v.toLocaleString('fr-FR')}` : '0');
 
 /**
  * « Bilan des inscriptions » — the second view of the « Nouvelles
@@ -63,7 +65,7 @@ export default function InscriptionsBilanChart({ data, width }: InscriptionsBila
     const plotHeight = heightPx - PAD_TOP - PAD_BOTTOM;
     const count = data.counts.length;
 
-    const upMax = Math.max(0, ...data.counts, ...bilan.changements, ...bilan.solde);
+    const upMax = Math.max(0, ...data.counts, ...bilan.solde);
     const downMax = Math.max(
         0,
         ...bilan.annulees,
@@ -207,8 +209,9 @@ export default function InscriptionsBilanChart({ data, width }: InscriptionsBila
                             <span className="gls-frais-tooltip-dot" style={{ backgroundColor: serie.color }} />
                             <span className="gls-frais-tooltip-label">{t(serie.label)}:</span>
                             <span className="gls-frais-tooltip-value">
-                                {serie.up ? '' : '−'}
-                                {value(serie.key, hoverIndex).toLocaleString('fr-FR')}
+                                {serie.up
+                                    ? value(serie.key, hoverIndex).toLocaleString('fr-FR')
+                                    : perte(value(serie.key, hoverIndex))}
                                 {serie.key === 'nouvelles' && (
                                     <span className="opacity-75 fw-normal">
                                         {' '}({t('of which :count active', { count: String(bilan.actives[hoverIndex] ?? 0) })})
@@ -219,7 +222,7 @@ export default function InscriptionsBilanChart({ data, width }: InscriptionsBila
                     ))}
                     <div className="gls-frais-tooltip-row mt-1 pt-1 border-top border-secondary">
                         <span className="gls-frais-tooltip-dot" style={{ backgroundColor: soldeColor(bilan.solde[hoverIndex]) }} />
-                        <span className="gls-frais-tooltip-label">{t('Balance')}:</span>
+                        <span className="gls-frais-tooltip-label">{t('Net result')}:</span>
                         <span className="gls-frais-tooltip-value">{signed(bilan.solde[hoverIndex])}</span>
                     </div>
                 </div>
@@ -231,18 +234,16 @@ export default function InscriptionsBilanChart({ data, width }: InscriptionsBila
                         <span className="gls-frais-tooltip-dot" style={{ backgroundColor: serie.color }} />
                         <span className="text-muted">{t(serie.label)}</span>
                         <span className="fw-semibold">
-                            {serie.up ? '' : '−'}
-                            {(serie.key === 'nouvelles' ? bilan.totaux.nouvelles : bilan.totaux[serie.key]).toLocaleString('fr-FR')}
+                            {serie.up ? bilan.totaux[serie.key].toLocaleString('fr-FR') : perte(bilan.totaux[serie.key])}
                         </span>
                         {serie.key === 'nouvelles' && (
                             <span className="text-muted">({t('of which :count active', { count: String(bilan.totaux.actives) })})</span>
                         )}
-                        {serie.key === 'changements' && <span className="text-muted">({t('neutral')})</span>}
                     </span>
                 ))}
                 <span className="d-inline-flex align-items-center gap-1">
                     <span style={{ width: 16, height: 2, backgroundColor: 'var(--gls-bilan-solde)', display: 'inline-block' }} />
-                    <span className="text-muted">{t('Balance')}</span>
+                    <span className="text-muted">{t('Net result')}</span>
                 </span>
             </div>
         </>

@@ -6,6 +6,7 @@ namespace App\Domain\Expenses\Actions;
 
 use App\Domain\Finance\Support\CaisseLedger;
 use App\Domain\Finance\Support\GardeSoldeCaisse;
+use App\Models\Caisse;
 use App\Models\Depense;
 use App\Models\Employee;
 use Illuminate\Support\Facades\DB;
@@ -71,7 +72,9 @@ final class ApprouverDepense
                 'statut',
                 // Bound by the CENTRE's share of the till, not the whole
                 // drawer (18/09/2026) — see GardeSoldeCaisse « PAR CENTRE ».
-                $centreId,
+                // A TPE / Virement account (CaisseResolver::forDepense,
+                // 03/11/2026) belongs to ONE centre: its whole balance.
+                in_array(Caisse::query()->whereKey($locked->caisse_id)->value('type'), Caisse::TYPES_METHODE, true) ? null : $centreId,
             );
 
             $this->ledger->debit(

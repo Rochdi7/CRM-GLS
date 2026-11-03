@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Domain\Finance\Support\CaisseResolver;
 use App\Domain\Payments\Support\ChequeOrigine;
 use App\Models\Activity;
 use App\Models\Caisse;
@@ -29,7 +30,8 @@ use Illuminate\Support\Facades\DB;
  * Anomalies (exit code 1):
  *  A. an encaissement whose account disagrees with its `methode`
  *     (Espèces in a TPE account, TPE in a physical till…);
- *  B. a dépense sitting in a method account; a remboursement sitting in a
+ *  B. a dépense sitting in a method account other than its own centre's
+ *     TPE / Virement account for its methode; a remboursement sitting in a
  *     method account that is not the reversal of a REJECTED cheque payment;
  *  C. a centre missing one of its three method accounts, or a method
  *     account without centre / with a responsable (the CHECK should make
@@ -137,18 +139,28 @@ final class VerifierCoherenceCaisses extends Command
         $rows = [];
 
         Depense::query()
-            ->with('caisse')
+            ->with(['caisse', 'group'])
             ->whereHas('caisse', fn ($q) => $q->whereIn('type', Caisse::TYPES_METHODE))
             ->orderBy('id')
             ->get()
             ->each(function (Depense $d) use (&$rows): void {
+                // CaisseResolver::forDepense (03/11/2026): a TPE / Virement
+                // dépense legitimately leaves ITS centre's account for that
+                // method — same type, same centre as the dépense.
+                if ($d->caisse !== null
+                    && in_array($d->methode_paiement, CaisseResolver::METHODES_DEPENSE_COMPTE_CENTRE, true)
+                    && $d->caisse->type === $d->methode_paiement
+                    && (int) $d->caisse->etablissement_id === (int) $d->centreId()) {
+                    return;
+                }
+
                 $rows[] = [
                     'Table' => 'depenses',
                     'Référence' => $d->reference,
                     'Montant' => $this->money($d->montant),
                     'Statut' => (string) $d->statut,
                     'Caisse' => (string) ($d->caisse?->nom ?? '-'),
-                    'Raison' => 'Une dépense se règle toujours depuis la caisse physique.',
+                    'Raison' => 'Une dépense se règle depuis la caisse physique, sauf en TPE / virement depuis le compte de cette méthode de SON centre.',
                 ];
             });
 
