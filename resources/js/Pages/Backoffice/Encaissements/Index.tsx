@@ -1659,44 +1659,46 @@ export default function EncaissementsIndex({ encaissements, montantTotal, vireme
                                             {row.isAvance ? (
                                                 <>
                                                     <span className="badge badge-soft-warning">Avance</span>
-                                                    {Number(row.montantUtilise ?? 0) + Number(row.montantTransfere ?? 0) > 0 ? (
-                                                        // « Appliquée : X MAD » alone says money left the avance
-                                                        // but not where it went. The title attribute names every
-                                                        // fee it paid (frais, groupe, montant, date) so a cashier
-                                                        // can read the allocation without opening the row.
-                                                        <div
-                                                            className="text-muted fs-12"
-                                                            style={{ cursor: row.fraisAppliques.length > 0 ? 'help' : undefined }}
-                                                            title={
-                                                                row.fraisAppliques.length > 0
-                                                                    ? row.fraisAppliques
-                                                                          .map(
-                                                                              (a) =>
-                                                                                  `${a.frais}${a.groupe ? ` (${a.groupe})` : ''} : ${Number(a.montant).toFixed(2)} MAD${a.date ? ` - ${a.date}` : ''}`,
-                                                                          )
-                                                                          .join('\n')
-                                                                    : undefined
-                                                            }
-                                                        >
-                                                            Appliquée : {Number(row.montantUtilise).toFixed(2)} MAD
-                                                            {Number(row.montantTransfere ?? 0) > 0 && (
-                                                                <>
-                                                                    {' '}
-                                                                    · {t('Transferred')} :{' '}
-                                                                    {Number(row.montantTransfere).toFixed(2)} MAD
-                                                                </>
-                                                            )}
-                                                            {row.fraisAppliques.length > 0 && (
-                                                                <i className="ti ti-info-circle ms-1" aria-hidden="true" />
-                                                            )}
+                                                    {row.fraisAppliques.length > 0 ? (
+                                                        // Une ligne par destination de l'argent : coche verte =
+                                                        // posé sur un frais de CETTE fiche ; flèches bleues =
+                                                        // parti sur une autre fiche (transfert d'étudiant). En
+                                                        // casse normale : la table est en capitales, illisible
+                                                        // sur trois lignes de détail.
+                                                        <ul className="list-unstyled mb-0 mt-1 fs-12 text-normal-case" style={{ minWidth: 240 }}>
                                                             {row.fraisAppliques.map((a, index) => (
-                                                                <div key={index} className="text-muted fs-12">
-                                                                    → {a.frais}
-                                                                    {a.groupe && ` (${a.groupe})`} :{' '}
-                                                                    {Number(a.montant).toFixed(2)} MAD
-                                                                </div>
+                                                                <li
+                                                                    key={index}
+                                                                    className="d-flex align-items-start justify-content-between gap-3"
+                                                                    title={a.date ? `${t('Date')} : ${a.date}` : undefined}
+                                                                >
+                                                                    <span className="d-flex align-items-start gap-1">
+                                                                        <i
+                                                                            className={`ti ${a.transfereVers ? 'ti-arrows-exchange text-info' : 'ti-check text-success'} mt-1`}
+                                                                            aria-hidden="true"
+                                                                        />
+                                                                        {a.transfereVers ? (
+                                                                            <span>
+                                                                                <span className="text-dark">{a.transfereVers.centre ?? '-'}</span>
+                                                                                <span className="text-muted d-block">
+                                                                                    {a.transfereVers.etudiant}
+                                                                                    {' · '}
+                                                                                    {a.frais}
+                                                                                </span>
+                                                                            </span>
+                                                                        ) : (
+                                                                            <span>
+                                                                                <span className="text-dark">{a.frais}</span>
+                                                                                {a.groupe && <span className="text-muted d-block">{a.groupe}</span>}
+                                                                            </span>
+                                                                        )}
+                                                                    </span>
+                                                                    <span className="fw-medium text-dark text-nowrap">{Number(a.montant).toFixed(2)} MAD</span>
+                                                                </li>
                                                             ))}
-                                                        </div>
+                                                        </ul>
+                                                    ) : Number(row.montantUtilise ?? 0) > 0 ? (
+                                                        <div className="text-muted fs-12">Appliquée : {Number(row.montantUtilise).toFixed(2)} MAD</div>
                                                     ) : (
                                                         <div className="text-muted fs-12">Non affectée à un frais</div>
                                                     )}

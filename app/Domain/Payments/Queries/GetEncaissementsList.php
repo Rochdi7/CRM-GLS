@@ -611,7 +611,7 @@ final class GetEncaissementsList
      * été UTILISÉE sur cette fiche — la liste la retire de « Montant utilisé ».
      *
      * @param  array<int, int|null>  $studentIdParEncaissement  encaissement id => student_id
-     * @return array<int, array{lignes: list<array{frais: string, groupe: ?string, montant: string, date: ?string}>, transfere: float}>
+     * @return array<int, array{lignes: list<array{frais: string, transfereVers: ?array{centre: ?string, etudiant: ?string}, groupe: ?string, montant: string, date: ?string}>, transfere: float}>
      */
     private function fraisAppliques(array $studentIdParEncaissement): array
     {
@@ -640,14 +640,19 @@ final class GetEncaissementsList
 
                 if ($autreFiche) {
                     $result[$avanceId]['transfere'] = round($result[$avanceId]['transfere'] + $allocation['montant'], 2);
-                    $destination = trim(($row->student?->etablissement?->nom_centre ?? '').' ('.($row->student?->nomComplet() ?? '?').')');
-                    $libelle = $allocation['kind'] === ResoudreAllocationsAvance::KIND_FRAIS
-                        ? __('Transferred → :destination', ['destination' => $destination]).' - '.$libelle
-                        : __('Transferred → :destination', ['destination' => $destination]);
                 }
 
                 $result[$avanceId]['lignes'][] = [
-                    'frais' => $libelle,
+                    // Pour une part transférée qui attend sur l'autre fiche,
+                    // « Frais non lié » ne dirait rien : c'est une avance.
+                    'frais' => $autreFiche && $allocation['kind'] === ResoudreAllocationsAvance::KIND_NON_LIE ? __('Advance') : $libelle,
+                    // Centre + étudiant d'arrivée quand l'argent a quitté
+                    // cette fiche ; null sinon. Champ à part : l'écran le
+                    // dessine avec sa propre icône, jamais collé au libellé.
+                    'transfereVers' => $autreFiche ? [
+                        'centre' => $row->student?->etablissement?->nom_centre,
+                        'etudiant' => $row->student?->nomComplet(),
+                    ] : null,
                     'groupe' => $allocation['kind'] === ResoudreAllocationsAvance::KIND_FRAIS
                         ? $row->fee?->inscription?->group?->nom
                         : null,

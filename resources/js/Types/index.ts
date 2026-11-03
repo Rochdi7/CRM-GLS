@@ -2308,7 +2308,14 @@ export interface EncaissementRow {
     /** Group of that former fee's inscription. */
     ancienFraisGroupe: string | null;
     /** Fee lines this avance was applied to (empty when none) — feeds the list cell’s hover detail. */
-    fraisAppliques: Array<{ frais: string; groupe: string | null; montant: MoneyDisplay; date: string | null }>;
+    fraisAppliques: Array<{
+        frais: string;
+        /** Set when this part left for ANOTHER student's record (student transfer). */
+        transfereVers: { centre: string | null; etudiant: string | null } | null;
+        groupe: string | null;
+        montant: MoneyDisplay;
+        date: string | null;
+    }>;
     /** Full amount of the paid fee — read-only context in the edit modal. */
     feeMontantTotal: MoneyDisplay | null;
     /** Fee amount minus everything already paid on it. */

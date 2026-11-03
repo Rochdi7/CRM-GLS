@@ -123,7 +123,7 @@ final class AvancePartTransfereeAutreFicheTest extends TestCase
         $this->assertSame('300.00', $row['montantTransfere']);
         $this->assertSame('0.00', $row['montantRestant'], 'The advance is still fully spent.');
         $this->assertTrue(
-            collect($row['fraisAppliques'])->contains(fn ($l) => str_contains($l['frais'], 'Transférée') && $l['montant'] === '300.00'),
+            collect($row['fraisAppliques'])->contains(fn ($l) => $l['transfereVers'] !== null && $l['montant'] === '300.00'),
             'The transferred part is named as such.',
         );
 
