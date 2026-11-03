@@ -139,21 +139,21 @@ final class DashboardNouvellesInscriptionsTest extends TestCase
                 ->where('nouvellesInscriptions.counts.26', 1)
                 ->where('nouvellesInscriptions.total', 1));
 
-        // « 3 mois » / « 6 mois » bucket by MONTH — never by week (23/09/2026).
+        // « 12 mois » buckets by MONTH — never by week (23/09/2026).
         $this->actingAs($this->superAdmin())
-            ->get(route('backoffice.dashboard', ['inscDuree' => '3m']))
+            ->get(route('backoffice.dashboard', ['inscDuree' => '12m']))
             ->assertInertia(fn (Assert $page) => $page
-                ->has('nouvellesInscriptions.counts', 3)
-                ->where('nouvellesInscriptions.labels.0', '01/2026')
-                ->where('nouvellesInscriptions.labels.2', '03/2026')
-                ->where('nouvellesInscriptions.counts.2', 1));
+                ->has('nouvellesInscriptions.counts', 12)
+                ->where('nouvellesInscriptions.labels.0', '04/2025')
+                ->where('nouvellesInscriptions.labels.11', '03/2026')
+                ->where('nouvellesInscriptions.counts.11', 1));
 
-        $this->actingAs($this->superAdmin())
-            ->get(route('backoffice.dashboard', ['inscDuree' => '6m']))
-            ->assertInertia(fn (Assert $page) => $page
-                ->has('nouvellesInscriptions.counts', 6)
-                ->where('nouvellesInscriptions.labels.0', '10/2025')
-                ->where('nouvellesInscriptions.counts.5', 1));
+        // « 3 mois » / « 6 mois » were removed (03/11/2026): they fall back to today.
+        foreach (['3m', '6m'] as $ancien) {
+            $this->actingAs($this->superAdmin())
+                ->get(route('backoffice.dashboard', ['inscDuree' => $ancien]))
+                ->assertInertia(fn (Assert $page) => $page->where('nouvellesInscriptions.duree', 'jour'));
+        }
 
         // The week bucket is gone: the old « 12 semaines » key falls back to today.
         $this->actingAs($this->superAdmin())
@@ -500,5 +500,53 @@ final class DashboardNouvellesInscriptionsTest extends TestCase
             ->getJson(route('backoffice.dashboard.nouvelles-inscriptions', ['duree' => 'jour', 'key' => '10']))
             ->assertJsonCount(1, 'students')
             ->assertJsonPath('students.0.studentId', $neuf->id);
+    }
+
+    public function test_the_bilan_counts_each_gesture_of_the_day_and_nets_it(): void
+    {
+        // Today, 10h: 4 new students, one of them cancelled the same day.
+        $nouvelles = [];
+        for ($n = 0; $n < 4; $n++) {
+            $nouvelles[] = $this->inscription(Student::factory()->create(['etablissement_id' => $this->centre->id]), '2026-03-15');
+        }
+        $nouvelles[0]->update(['statut' => Inscription::STATUT_ANNULEE]);
+
+        // Older dossiers, worked on today: one archived, one group change, one deleted.
+        $vieux = fn () => $this->inscription(Student::factory()->create(['etablissement_id' => $this->centre->id]), '2025-10-01');
+        $vieux()->update(['statut' => Inscription::STATUT_ARCHIVEE]);
+        $vieux()->update(['statut' => Inscription::STATUT_CHANGEMENT]);
+        $vieux()->delete();
+
+        // A legacy row IMPORTED already cancelled is not a cancellation of today.
+        $this->inscription(Student::factory()->create(['etablissement_id' => $this->centre->id]), '2025-10-01', Inscription::STATUT_ANNULEE);
+
+        // Another centre's gestures never reach this centre's bilan.
+        $ailleurs = Etablissement::factory()->create();
+        $autre = Inscription::create([
+            'reference' => 'INS-'.fake()->unique()->numberBetween(1000, 99999),
+            'student_id' => Student::factory()->create(['etablissement_id' => $ailleurs->id])->id,
+            'group_id' => $this->group->id,
+            'etablissement_id' => $ailleurs->id,
+            'annee_scolaire_id' => $this->group->annee_scolaire_id,
+            'statut' => Inscription::STATUT_ACTIVE,
+            'date_inscription' => '2025-10-01',
+        ]);
+        $autre->update(['statut' => Inscription::STATUT_ANNULEE]);
+
+        $admin = $this->superAdmin();
+        $this->actingAs($admin);
+        app(\App\Services\Context\CurrentContext::class)->setEtablissement($this->centre->id);
+
+        $this->get(route('backoffice.dashboard', ['inscDuree' => 'jour']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('nouvellesInscriptions.counts.10', 4)
+                ->where('nouvellesInscriptions.bilan.actives.10', 3)
+                ->where('nouvellesInscriptions.bilan.annulees.10', 1)
+                ->where('nouvellesInscriptions.bilan.archivees.10', 1)
+                ->where('nouvellesInscriptions.bilan.changements.10', 1)
+                ->where('nouvellesInscriptions.bilan.supprimees.10', 1)
+                // 4 new − 1 cancelled − 1 archived − 1 deleted; a group change is neutral.
+                ->where('nouvellesInscriptions.bilan.solde.10', 1)
+                ->where('nouvellesInscriptions.bilan.totaux.solde', 1));
     }
 }

@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Domain\Reports\Actions;
 
+use App\Models\Inscription;
 use App\Services\Context\CurrentContext;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -21,9 +23,9 @@ use Illuminate\Support\Facades\DB;
  *              « 30 jours » and « 12 semaines » were replaced by month windows
  *              on 23/09/2026: the school plans by month, never by week);
  *  - `1m`    — the last month (today minus one month → today), one bar per day;
- *  - `3m`    — last 3 months, one bar per month;
- *  - `6m`    — last 6 months, one bar per month;
- *  - `12m`   — last 12 months, one bar per month;
+ *  - `12m`   — last 12 months, one bar per month (« 3 mois » / « 6 mois »
+ *              removed 03/11/2026 at the owner's request — the old keys fall
+ *              back to today like any unknown key);
  *  - `periode` — a FREE window chosen by the user (« Du » / « Au » date
  *              pickers, 19/10/2026 — replaces the old « Année scolaire »
  *              button: the school wanted to compare any two dates, not only
@@ -55,10 +57,27 @@ use Illuminate\Support\Facades\DB;
  * Like « Résumé des frais annuels », the année only supplies the WINDOW.
  * Centre-scoped on the dossier's centre via CurrentContext (NULL on « Tous
  * les centres »). One GROUP BY query whatever the volume.
+ *
+ * ⚠ « BILAN » (03/11/2026) — the second view behind the swap icon. Same
+ * window, same buckets, and for each bucket WHAT HAPPENED to inscriptions:
+ *  - `nouvelles` = the bars above (same query), `actives` = how many of those
+ *    are still Active today;
+ *  - `annulees` / `changements` / `archivees` = statut TRANSITIONS dated by
+ *    the journal entry (`activity_log`, event `updated`, new statut ≠ old) —
+ *    the moment the gesture was made, not the dossier's date. A legacy row
+ *    IMPORTED already « Annulée » is an `created` entry and is not counted:
+ *    nobody cancelled anything that day;
+ *  - `supprimees` = `deleted` journal entries (append-only, so a deletion
+ *    survives its row);
+ *  - `solde` = nouvelles − annulées − archivées − supprimées. A group change
+ *    is shown but NEUTRAL: the student stays, only the group moves.
+ * Centre of a journal entry = the inscription's current centre, or — once
+ * deleted — the centre frozen in the entry's `old` attributes. One GROUP BY
+ * on the journal, whatever the volume.
  */
 final class GetNouvellesInscriptionsChart
 {
-    public const DUREES = ['jour', '7j', '1m', '3m', '6m', '12m', 'periode'];
+    public const DUREES = ['jour', '7j', '1m', '12m', 'periode'];
 
     public const DUREE_DEFAUT = 'jour';
 
@@ -82,41 +101,58 @@ final class GetNouvellesInscriptionsChart
         $bucketSql = self::bucketSql($unit);
 
         $rows = $this->nouvellesInscriptions($start, $end)
-            ->selectRaw("{$bucketSql} AS bucket, COUNT(*) AS total")
+            ->selectRaw("{$bucketSql} AS bucket, COUNT(*) AS total, COUNT(*) FILTER (WHERE i.statut = ?) AS actives", [Inscription::STATUT_ACTIVE])
             ->groupByRaw($bucketSql)
-            ->pluck('total', 'bucket');
+            ->get()
+            ->keyBy('bucket');
+
+        $events = $this->evenements($start, $end, $unit);
 
         $labels = [];
         $keys = [];
-        $counts = [];
         if ($unit === 'hour') {
             for ($h = 0; $h < 24; $h++) {
                 $labels[] = sprintf('%02dh', $h);
                 $keys[] = sprintf('%02d', $h);
-                $counts[] = (int) ($rows[sprintf('%02d', $h)] ?? 0);
             }
+        } else {
+            $cursor = $unit === 'day' ? $start->copy() : $start->copy()->startOfMonth();
 
-            return [
-                'duree' => $duree,
-                ...$plage,
-                'labels' => $labels,
-                'keys' => $keys,
-                'counts' => $counts,
-                'total' => array_sum($counts),
-                'periode' => $start->format('d/m/Y'),
-            ];
+            while ($cursor->lessThanOrEqualTo($end)) {
+                $keys[] = $unit === 'month' ? $cursor->format('Y-m') : $cursor->format('Y-m-d');
+                $labels[] = $unit === 'day' ? $cursor->format('d/m') : $cursor->format('m/Y');
+
+                $unit === 'day' ? $cursor->addDay() : $cursor->addMonth();
+            }
         }
 
-        $cursor = $unit === 'day' ? $start->copy() : $start->copy()->startOfMonth();
+        $counts = [];
+        $bilan = ['actives' => [], 'annulees' => [], 'changements' => [], 'archivees' => [], 'supprimees' => [], 'solde' => []];
+        foreach ($keys as $key) {
+            $nouvelles = (int) ($rows[$key]->total ?? 0);
+            $ev = $events[$key] ?? null;
+            $annulees = (int) ($ev->annulees ?? 0);
+            $archivees = (int) ($ev->archivees ?? 0);
+            $supprimees = (int) ($ev->supprimees ?? 0);
 
-        while ($cursor->lessThanOrEqualTo($end)) {
-            $key = $unit === 'month' ? $cursor->format('Y-m') : $cursor->format('Y-m-d');
-            $labels[] = $unit === 'day' ? $cursor->format('d/m') : $cursor->format('m/Y');
-            $keys[] = $key;
-            $counts[] = (int) ($rows[$key] ?? 0);
-
-            $unit === 'day' ? $cursor->addDay() : $cursor->addMonth();
+            $counts[] = $nouvelles;
+            $bilan['actives'][] = (int) ($rows[$key]->actives ?? 0);
+            $bilan['annulees'][] = $annulees;
+            $bilan['changements'][] = (int) ($ev->changements ?? 0);
+            $bilan['archivees'][] = $archivees;
+            $bilan['supprimees'][] = $supprimees;
+            $bilan['solde'][] = $nouvelles - $annulees - $archivees - $supprimees;
         }
+
+        $bilan['totaux'] = [
+            'nouvelles' => array_sum($counts),
+            'actives' => array_sum($bilan['actives']),
+            'annulees' => array_sum($bilan['annulees']),
+            'changements' => array_sum($bilan['changements']),
+            'archivees' => array_sum($bilan['archivees']),
+            'supprimees' => array_sum($bilan['supprimees']),
+            'solde' => array_sum($bilan['solde']),
+        ];
 
         return [
             'duree' => $duree,
@@ -125,8 +161,54 @@ final class GetNouvellesInscriptionsChart
             'keys' => $keys,
             'counts' => $counts,
             'total' => array_sum($counts),
-            'periode' => $start->format('d/m/Y').' – '.$end->format('d/m/Y'),
+            'periode' => $unit === 'hour'
+                ? $start->format('d/m/Y')
+                : $start->format('d/m/Y').' – '.$end->format('d/m/Y'),
+            'bilan' => $bilan,
         ];
+    }
+
+    /**
+     * Statut transitions and deletions journaled inside the window, per
+     * bucket (class docblock « BILAN »). Keyed by the bucket string.
+     *
+     * @param  'hour'|'day'|'month'  $unit
+     * @return Collection<string, object{annulees: int, changements: int, archivees: int, supprimees: int}>
+     */
+    private function evenements(Carbon $start, Carbon $end, string $unit): Collection
+    {
+        $centreId = $this->context->etablissementId();
+        $bucket = match ($unit) {
+            'hour' => "to_char(a.created_at, 'HH24')",
+            'day' => "to_char(a.created_at, 'YYYY-MM-DD')",
+            default => "to_char(a.created_at, 'YYYY-MM')",
+        };
+        $nouveau = "(a.attribute_changes->'attributes'->>'statut')";
+        $ancien = "(a.attribute_changes->'old'->>'statut')";
+        $transition = fn (string $statut): string => "a.event = 'updated' AND {$nouveau} = ".DB::getPdo()->quote($statut)." AND {$ancien} IS DISTINCT FROM {$nouveau}";
+
+        return DB::table('activity_log as a')
+            ->leftJoin('inscriptions as i', 'i.id', '=', 'a.subject_id')
+            ->where('a.log_name', 'inscription')
+            ->where('a.subject_type', (new Inscription)->getMorphClass())
+            ->whereBetween('a.created_at', [$start->copy()->startOfDay(), $end->copy()->endOfDay()])
+            ->where(fn (Builder $w) => $w
+                ->where('a.event', 'deleted')
+                ->orWhere(fn (Builder $u) => $u
+                    ->where('a.event', 'updated')
+                    ->whereRaw("{$nouveau} IN (?, ?, ?)", [Inscription::STATUT_ANNULEE, Inscription::STATUT_CHANGEMENT, Inscription::STATUT_ARCHIVEE])))
+            ->when($centreId, fn (Builder $q) => $q->whereRaw(
+                "COALESCE(i.etablissement_id::text, a.attribute_changes->'old'->>'etablissement_id') = ?",
+                [(string) $centreId],
+            ))
+            ->selectRaw("{$bucket} AS bucket,
+                COUNT(*) FILTER (WHERE {$transition(Inscription::STATUT_ANNULEE)}) AS annulees,
+                COUNT(*) FILTER (WHERE {$transition(Inscription::STATUT_CHANGEMENT)}) AS changements,
+                COUNT(*) FILTER (WHERE {$transition(Inscription::STATUT_ARCHIVEE)}) AS archivees,
+                COUNT(*) FILTER (WHERE a.event = 'deleted') AS supprimees")
+            ->groupByRaw($bucket)
+            ->get()
+            ->keyBy('bucket');
     }
 
     /**
@@ -304,8 +386,6 @@ final class GetNouvellesInscriptionsChart
         return match ($duree) {
             '7j' => [$today->copy()->subDays(6), $today, 'day'],
             '1m' => [$today->copy()->subMonthNoOverflow()->addDay(), $today, 'day'],
-            '3m' => [$today->copy()->startOfMonth()->subMonths(2), $today, 'month'],
-            '6m' => [$today->copy()->startOfMonth()->subMonths(5), $today, 'month'],
             '12m' => [$today->copy()->startOfMonth()->subMonths(11), $today, 'month'],
             'periode' => self::periodeWindow($debut, $fin),
             default => [$today, $today->copy(), 'hour'],

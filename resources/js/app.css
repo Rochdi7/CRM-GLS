@@ -901,8 +901,24 @@ html[data-theme='dark'] .gls-ctx-btn-centre[aria-expanded='true'] {
     --gls-bar-5: #fd7e14;
     --gls-bar-6: #02a8b5;
     --gls-bar-7: #e82646;
+    /* « Bilan des inscriptions » (03/11/2026) — the inscription statut palette
+     * (Lib/inscriptionStatut: vert Active, bleu clair Changement, rouge
+     * Annulée, gris Archivée) + purple for a deletion and the primary for the
+     * solde line. */
+    --gls-bilan-nouvelles: #1abe17;
+    --gls-bilan-changement: #5fa8f5;
+    --gls-bilan-annulee: #e82646;
+    --gls-bilan-archivee: #8f95a3;
+    --gls-bilan-supprimee: #4a00e5;
+    --gls-bilan-solde: #3d5ee1;
 }
 html[data-theme='dark'] .gls-frais-chart {
+    --gls-bilan-nouvelles: #2ab127;
+    --gls-bilan-changement: #6fb3f7;
+    --gls-bilan-annulee: #e1475f;
+    --gls-bilan-archivee: #7d8392;
+    --gls-bilan-supprimee: #8558f5;
+    --gls-bilan-solde: #5474f5;
     --gls-chart-grid: #2c2c3a;
     --gls-chart-muted: #9ca1af;
     --gls-chart-surface: #1b1632;

@@ -261,7 +261,31 @@ export interface EspaceEnseignantData {
     cumul: { approuve: number; enAttente: number; nombre: number };
 }
 
-export type NouvellesInscriptionsDuree = 'jour' | '7j' | '1m' | '3m' | '6m' | '12m' | 'periode';
+export type NouvellesInscriptionsDuree = 'jour' | '7j' | '1m' | '12m' | 'periode';
+
+/**
+ * « Bilan » view of the same chart (03/11/2026) — per bucket, aligned on
+ * `keys`: what happened to inscriptions. `solde` = nouvelles − annulées −
+ * archivées − supprimées (computed server-side; a group change is neutral).
+ */
+export interface NouvellesInscriptionsBilan {
+    /** Of the bucket's new registrations, how many are still Active. */
+    actives: number[];
+    annulees: number[];
+    changements: number[];
+    archivees: number[];
+    supprimees: number[];
+    solde: number[];
+    totaux: {
+        nouvelles: number;
+        actives: number;
+        annulees: number;
+        changements: number;
+        archivees: number;
+        supprimees: number;
+        solde: number;
+    };
+}
 
 /** GetNouvellesInscriptionsChart — new registrations only (group changes excluded). */
 export interface NouvellesInscriptionsChartData {
@@ -275,6 +299,7 @@ export interface NouvellesInscriptionsChartData {
     counts: number[];
     total: number;
     periode: string;
+    bilan: NouvellesInscriptionsBilan;
 }
 
 /** One student behind a clicked bar (GetNouvellesInscriptionsChart::students). */

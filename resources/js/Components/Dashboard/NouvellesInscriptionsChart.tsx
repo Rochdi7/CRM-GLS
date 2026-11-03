@@ -5,6 +5,10 @@ import { statutVariant } from '@/Lib/inscriptionStatut';
 import Modal from '@/Components/Modals/Modal';
 import DateField from '@/Components/Forms/DateField';
 import { PagerFooter } from '@/Components/Tables/Pagination';
+import InscriptionsBilanChart from '@/Components/Dashboard/InscriptionsBilanChart';
+
+/** Which face of the card is shown — the swap icon flips it, client-side (both come in the same prop). */
+type ChartView = 'nouvelles' | 'bilan';
 
 interface NouvellesInscriptionsChartProps {
     data: NouvellesInscriptionsChartData;
@@ -42,8 +46,6 @@ const DUREES: { value: NouvellesInscriptionsDuree; label: string }[] = [
     { value: 'jour', label: 'Today' },
     { value: '7j', label: '7 days' },
     { value: '1m', label: '1 month' },
-    { value: '3m', label: '3 months' },
-    { value: '6m', label: '6 months' },
     { value: '12m', label: '12 months' },
 ];
 
@@ -94,6 +96,9 @@ function niceMax(max: number): number {
  */
 export default function NouvellesInscriptionsChart({ data, onDureeChange, loading = false }: NouvellesInscriptionsChartProps) {
     const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+    // « Bilan » (03/11/2026): same window and buckets, served in the same prop.
+    const [view, setView] = useState<ChartView>('nouvelles');
+    const solde = data.bilan.totaux.solde;
     const [debut, setDebut] = useState(data.debut ?? '');
     const [fin, setFin] = useState(data.fin ?? '');
     const periodeActive = data.duree === 'periode';
@@ -231,13 +236,38 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
         <div className="card gls-frais-chart gls-dash-card">
             <div className="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
                 <div>
-                    <h4 className="card-title mb-1">{t('New registrations')}</h4>
+                    <h4 className="card-title mb-1">{view === 'bilan' ? t('Registrations balance') : t('New registrations')}</h4>
                     <p className="text-muted mb-0">{data.periode}</p>
                 </div>
                 <div className="d-flex align-items-center flex-wrap gap-2 gls-duree-bar">
-                    <span className="badge badge-soft-primary fs-13">
-                        {t('Total')} : {data.total.toLocaleString('fr-FR')}
-                    </span>
+                    {view === 'bilan' ? (
+                        <span
+                            className={`badge fs-13 d-inline-flex align-items-center gap-1 ${
+                                solde > 0 ? 'badge-soft-success' : solde < 0 ? 'badge-soft-danger' : 'badge-soft-secondary'
+                            }`}
+                        >
+                            <i className={`ti ${solde > 0 ? 'ti-trending-up' : solde < 0 ? 'ti-trending-down' : 'ti-minus'}`} />
+                            {t('Balance')} : {solde > 0 ? '+' : ''}
+                            {solde.toLocaleString('fr-FR')}
+                        </span>
+                    ) : (
+                        <span className="badge badge-soft-primary fs-13">
+                            {t('Total')} : {data.total.toLocaleString('fr-FR')}
+                        </span>
+                    )}
+                    <button
+                        type="button"
+                        className={`btn btn-sm btn-icon ${view === 'bilan' ? 'btn-primary' : 'btn-outline-light text-body'}`}
+                        title={view === 'bilan' ? t('Show new registrations') : t('Show the balance')}
+                        aria-label={view === 'bilan' ? t('Show new registrations') : t('Show the balance')}
+                        aria-pressed={view === 'bilan'}
+                        onClick={() => {
+                            setHoverIndex(null);
+                            setView((v) => (v === 'bilan' ? 'nouvelles' : 'bilan'));
+                        }}
+                    >
+                        <i className="ti ti-arrows-exchange fs-16" />
+                    </button>
                     <div className="btn-group btn-group-sm gls-duree-group" role="group" aria-label={t('Duration')}>
                         {DUREES.map((d) => (
                             <button
@@ -279,6 +309,15 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
             </div>
             <div className="card-body">
                 <div className="position-relative" ref={containerRef} style={{ opacity: loading ? 0.5 : 1 }}>
+                    {view === 'bilan' ? (
+                        <>
+                            <p className="text-muted fs-13 mb-2">
+                                {t('Gained: new registrations. Lost: cancelled, archived and deleted registrations.')}
+                            </p>
+                            <InscriptionsBilanChart data={data} width={WIDTH} />
+                        </>
+                    ) : (
+                    <>
                     <svg
                         width={WIDTH}
                         height={HEIGHT_PX}
@@ -385,6 +424,8 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
                                 <div className="gls-frais-tooltip-row fs-12 opacity-75">{t('Click to see the students')}</div>
                             )}
                         </div>
+                    )}
+                    </>
                     )}
                 </div>
             </div>
