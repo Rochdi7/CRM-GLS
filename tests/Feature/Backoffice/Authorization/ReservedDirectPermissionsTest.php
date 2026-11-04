@@ -118,6 +118,30 @@ final class ReservedDirectPermissionsTest extends TestCase
         $this->assertTrue($target->fresh()->can('expenses.approve'));
     }
 
+    /**
+     * Production 04/11/2026: `registrations.update-fee-amount` was in the
+     * registry (so the picker offered it) but its `permissions` row did not
+     * exist yet — the deploy had not re-run the seeder — and saving the
+     * Autorisations form 500'd on PermissionDoesNotExist.
+     */
+    public function test_a_registry_permission_whose_row_is_missing_is_provisioned_on_save(): void
+    {
+        $target = $this->userIn('accountant');
+        \Spatie\Permission\Models\Permission::query()
+            ->where('name', 'registrations.update-fee-amount')->delete();
+        app(\Spatie\Permission\PermissionRegistrar::class)->forgetCachedPermissions();
+
+        $this->actingAs($this->superAdmin())
+            ->put(route('backoffice.users.authorization.update', $target), [
+                'roles' => ['accountant'],
+                'directPermissions' => ['registrations.update-fee-amount'],
+            ])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect(route('backoffice.users.index'));
+
+        $this->assertTrue($target->fresh()->hasDirectPermission('registrations.update-fee-amount'));
+    }
+
     public function test_a_reserved_permission_already_delegated_survives_a_directors_later_edit(): void
     {
         // Delegated by a super-admin earlier…

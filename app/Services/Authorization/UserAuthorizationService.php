@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Support\Authorization\PermissionRegistry;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\PermissionRegistrar;
 
 /**
@@ -23,6 +24,8 @@ use Spatie\Permission\PermissionRegistrar;
  */
 final class UserAuthorizationService
 {
+    private const GUARD = 'web';
+
     /**
      * @param  list<string>  $roleNames  role machine names
      * @param  list<string>  $directPermissions  permission machine names
@@ -57,6 +60,19 @@ final class UserAuthorizationService
             $target->syncRoles($roleNames);
 
             if ($actor->can('users.assign-permissions')) {
+                // Every name here already passed guardPermissionNames(), i.e.
+                // it is in PermissionRegistry — the CODE is the authority. A
+                // permission added to the registry reaches the picker at once,
+                // but its `permissions` ROW only exists once
+                // RolesAndPermissionsSeeder has run; a deploy that skipped
+                // db:seed made syncPermissions() throw PermissionDoesNotExist
+                // and the whole save 500'd (04/11/2026,
+                // registrations.update-fee-amount on production). Provision
+                // the row the way the seeder does, then sync.
+                foreach ($directPermissions as $name) {
+                    Permission::findOrCreate($name, self::GUARD);
+                }
+
                 $target->syncPermissions($directPermissions);
             }
         });
