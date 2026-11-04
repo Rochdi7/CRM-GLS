@@ -71,7 +71,9 @@ use Illuminate\Support\Facades\DB;
  *    IMPORTED already « Annulée » is an `created` entry and is not counted:
  *    nobody cancelled anything that day;
  *  - `supprimees` = `deleted` journal entries (append-only, so a deletion
- *    survives its row);
+ *    survives its row) of a student who has NO Active inscription left —
+ *    deleting a dossier while the student still studies is not a loss
+ *    (04/11/2026);
  *  - `solde` (« Résultat net » on screen) = nouvelles − annulées − archivées
  *    − supprimées. A group change is NOT part of the bilan at all (owner,
  *    03/11/2026): the student stays, only the group moves.
@@ -252,7 +254,12 @@ final class GetNouvellesInscriptionsChart
     private static function serieJournalSql(string $serie): string
     {
         if ($serie === 'supprimees') {
-            return "a.event = 'deleted'";
+            // A deleted dossier is a LOSS only when the student has no Active
+            // inscription left (04/11/2026, owner): deleting a duplicate or
+            // re-keying a dossier while the student keeps studying loses nobody.
+            return "a.event = 'deleted' AND NOT EXISTS (SELECT 1 FROM inscriptions o"
+                .' WHERE o.student_id = ('.self::snapshotSql('student_id').')::bigint'
+                .' AND o.statut = '.DB::getPdo()->quote(Inscription::STATUT_ACTIVE).')';
         }
 
         $statut = $serie === 'annulees' ? Inscription::STATUT_ANNULEE : Inscription::STATUT_ARCHIVEE;

@@ -550,6 +550,35 @@ final class DashboardNouvellesInscriptionsTest extends TestCase
                 ->where('nouvellesInscriptions.bilan.totaux.solde', 1));
     }
 
+    public function test_a_deleted_dossier_is_not_a_loss_while_the_student_keeps_an_active_one(): void
+    {
+        $admin = $this->superAdmin();
+        $this->actingAs($admin);
+        app(\App\Services\Context\CurrentContext::class)->setEtablissement($this->centre->id);
+
+        // Still studying: a duplicate dossier deleted, an Active one remains.
+        $reste = Student::factory()->create(['etablissement_id' => $this->centre->id, 'nom' => 'Reste']);
+        $this->inscription($reste, '2025-09-01');
+        $this->inscription($reste, '2025-10-01')->delete();
+
+        // Gone: the only dossier deleted, or only closed dossiers left.
+        $parti = Student::factory()->create(['etablissement_id' => $this->centre->id, 'nom' => 'Parti']);
+        $this->inscription($parti, '2025-10-01')->delete();
+        $clos = Student::factory()->create(['etablissement_id' => $this->centre->id, 'nom' => 'Clos']);
+        $this->inscription($clos, '2025-09-01', Inscription::STATUT_ANNULEE);
+        $this->inscription($clos, '2025-10-01')->delete();
+
+        $this->get(route('backoffice.dashboard', ['inscDuree' => 'jour']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('nouvellesInscriptions.bilan.supprimees.10', 2)
+                ->where('nouvellesInscriptions.bilan.totaux.supprimees', 2)
+                ->where('nouvellesInscriptions.bilan.solde.10', -2));
+
+        $liste = $this->getJson(route('backoffice.dashboard.nouvelles-inscriptions', ['duree' => 'jour', 'key' => '10', 'serie' => 'supprimees']))
+            ->assertJsonPath('total', 2);
+        $this->assertSame(['Parti', 'Clos'], array_column($liste->json('students'), 'nom'));
+    }
+
     public function test_clicking_a_bilan_bar_lists_exactly_the_registrations_it_counts(): void
     {
         $admin = $this->superAdmin();
