@@ -181,6 +181,35 @@ final class DepenseMethodeCompteCentreTest extends TestCase
         $this->assertSame('3800.00', (string) $compte->fresh()->solde);
     }
 
+    /**
+     * Signalé 04/11/2026 : un « Paiement prof » Virement de 13 000 DH saisi
+     * sur GLS Online le 26/10 — AVANT la règle du 03/11 — pointait encore la
+     * caisse physique de l'employé ; l'approbation le bornait par la part
+     * d'Online de ce tiroir (5 310 DH) alors que le compte Virement d'Online
+     * en contenait plus d'un million. Une ligne EN ATTENTE n'a rien débité :
+     * l'approbation la re-pointe sur le compte de la méthode de son centre.
+     */
+    public function test_approving_a_pending_virement_keyed_before_the_rule_debits_the_centres_account_not_the_till(): void
+    {
+        $user = $this->cashier();
+        $till = $user->employee->till()->firstOrFail();
+        $till->update(['solde' => '300.00']);
+        $compte = $this->compte($this->online, Encaissement::METHODE_VIREMENT);
+        $compte->update(['solde' => '50000.00']);
+
+        $depense = $this->keyIn($user, $this->online, ['montant' => '13000.00']);
+        // As a row created before 03/11/2026 was stored: on the till.
+        $depense->forceFill(['caisse_id' => $till->id])->saveQuietly();
+
+        $this->approve($depense)->assertSessionHasNoErrors();
+
+        $depense->refresh();
+        $this->assertSame($compte->id, $depense->caisse_id);
+        $this->assertSame(Depense::STATUT_APPROUVEE, $depense->statut);
+        $this->assertSame('37000.00', (string) $compte->fresh()->solde);
+        $this->assertSame('300.00', (string) $till->fresh()->solde);
+    }
+
     public function test_approval_is_refused_when_the_method_account_does_not_hold_the_amount(): void
     {
         $user = $this->cashier();

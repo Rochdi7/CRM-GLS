@@ -465,7 +465,12 @@ final class TransfertEtudiantCentreTest extends TestCase
     // 3. Une fiche « Transféré » est close dans son centre
     // ---------------------------------------------------------------
 
-    public function test_a_transferred_record_takes_no_new_money_and_leaves_the_enrolment_dropdown(): void
+    /**
+     * La fiche « Transféré » reste LISTÉE dans le dropdown d'inscription
+     * (04/11/2026), mais marquée non inscriptible en nommant le centre
+     * d'arrivée — la masquer faisait croire que l'étudiant n'existait pas.
+     */
+    public function test_a_transferred_record_takes_no_new_money_and_is_listed_as_not_enrollable(): void
     {
         $student = $this->etudiant();
         $this->demander($student);
@@ -481,8 +486,10 @@ final class TransfertEtudiantCentreTest extends TestCase
 
         $this->demander($student)->assertSessionHasErrors('student_id');
 
-        $ids = app(GetInscriptionFormOptions::class)->students($this->guichet->user->fresh())->pluck('id')->all();
-        $this->assertNotContains($student->id, $ids);
+        $options = app(GetInscriptionFormOptions::class)->students($this->guichet->user->fresh())->keyBy('id');
+        $this->assertTrue($options->has($student->id), 'A transferred record must stay listed, never hidden.');
+        $this->assertNotNull($options[$student->id]['nonInscriptible']);
+        $this->assertStringContainsString('GLS Casablanca', $options[$student->id]['nonInscriptible']);
     }
 
     /**

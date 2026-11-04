@@ -549,4 +549,58 @@ final class DashboardNouvellesInscriptionsTest extends TestCase
                 ->where('nouvellesInscriptions.bilan.solde.10', 1)
                 ->where('nouvellesInscriptions.bilan.totaux.solde', 1));
     }
+
+    public function test_clicking_a_bilan_bar_lists_exactly_the_registrations_it_counts(): void
+    {
+        $admin = $this->superAdmin();
+        $this->actingAs($admin);
+        app(\App\Services\Context\CurrentContext::class)->setEtablissement($this->centre->id);
+
+        $vieux = fn (string $nom) => $this->inscription(Student::factory()->create(['etablissement_id' => $this->centre->id, 'nom' => $nom]), '2025-10-01');
+
+        $annulee = $vieux('Annule');
+        $annulee->update(['statut' => Inscription::STATUT_ANNULEE, 'motif_annulation' => 'Déménagement']);
+        $vieux('Archive')->update(['statut' => Inscription::STATUT_ARCHIVEE, 'archive_motif' => 'Voyage']);
+        $vieux('Changement')->update(['statut' => Inscription::STATUT_CHANGEMENT]);
+        $supprimee = $vieux('Supprime');
+        $supprimee->delete();
+        // Cancelled THEN deleted: the update entry only kept `statut`; the
+        // student is read back from the deletion snapshot.
+        $deuxFois = $vieux('DeuxFois');
+        $deuxFois->update(['statut' => Inscription::STATUT_ANNULEE]);
+        $deuxFois->delete();
+
+        $this->get(route('backoffice.dashboard', ['inscDuree' => 'jour']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('nouvellesInscriptions.bilan.annulees.10', 2)
+                ->where('nouvellesInscriptions.bilan.archivees.10', 1)
+                ->where('nouvellesInscriptions.bilan.supprimees.10', 2));
+
+        $liste = fn (string $serie) => $this->getJson(route('backoffice.dashboard.nouvelles-inscriptions', ['duree' => 'jour', 'key' => '10', 'serie' => $serie]))->assertOk();
+
+        $annulees = $liste('annulees')->assertJsonPath('total', 2)->assertJsonCount(2, 'students');
+        $this->assertSame(['Annule', 'DeuxFois'], array_column($annulees->json('students'), 'nom'));
+        $annulees->assertJsonPath('students.0.motif', 'Déménagement')
+            ->assertJsonPath('students.0.statut', Inscription::STATUT_ANNULEE)
+            ->assertJsonPath('students.0.reference', $annulee->reference)
+            ->assertJsonPath('students.1.statut', null)
+            ->assertJsonPath('students.1.studentId', $deuxFois->student_id);
+        $this->assertStringStartsWith($admin->name, (string) $annulees->json('students.0.par'));
+
+        $liste('archivees')->assertJsonPath('total', 1)
+            ->assertJsonPath('students.0.nom', 'Archive')
+            ->assertJsonPath('students.0.motif', 'Voyage');
+
+        $supprimees = $liste('supprimees')->assertJsonPath('total', 2);
+        $this->assertSame(['Supprime', 'DeuxFois'], array_column($supprimees->json('students'), 'nom'));
+        $supprimees->assertJsonPath('students.0.inscriptionId', null)
+            ->assertJsonPath('students.0.reference', $supprimee->reference)
+            ->assertJsonPath('students.0.studentId', $supprimee->student_id);
+
+        // Another bucket, or a series the chart does not draw, lists nothing.
+        $this->getJson(route('backoffice.dashboard.nouvelles-inscriptions', ['duree' => 'jour', 'key' => '09', 'serie' => 'annulees']))
+            ->assertJsonPath('total', 0);
+        $this->getJson(route('backoffice.dashboard.nouvelles-inscriptions', ['duree' => 'jour', 'key' => '10', 'serie' => 'changements']))
+            ->assertJsonPath('total', 0);
+    }
 }

@@ -479,8 +479,12 @@ the database layer. Non-negotiable invariants already enforced in code:
     would switch accounts (422). `GardeSoldeCaisse` bounds a TPE / Virement
     dépense by the whole account (it belongs to one centre), a till by the
     centre's share. `caisse:verifier-coherence` accepts a dépense only in
-    its own centre's account of its own method. Rows older than the rule
-    keep their till. **Preuve de paiement** : à l'approbation d'une dépense
+    its own centre's account of its own method. DECIDED rows older than the
+    rule keep their till; a still-PENDING TPE / Virement row keyed before it
+    is re-pointed to its centre's method account AT APPROVAL
+    (`ApprouverDepense`, under the row lock — nothing was debited yet), so
+    it is bounded by that account, never by the till's centre share
+    (signalé 04/11/2026, 13 000 DH refusés sur 5 310 DH de part de tiroir). **Preuve de paiement** : à l'approbation d'une dépense
     TPE / Virement, l'approbateur peut joindre la capture du virement / le
     ticket TPE envoyé (`ApproveDepenseRequest`, média
     `Depense::MEDIA_PREUVE_PAIEMENT` = `preuve_paiement`, à part des

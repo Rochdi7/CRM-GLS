@@ -2444,7 +2444,13 @@ export default function DepensesIndex({
                 title={decision?.type === 'approve' ? 'Approuver la depense' : 'Refuser la depense'}
                 message={
                     decision?.type === 'approve'
-                        ? (decision.row.caisse
+                        ? (decisionCompteCentre && decision.row.etablissement
+                            // TPE / Virement: the centre's account for the
+                            // method (ApprouverDepense re-points a pending row
+                            // keyed before the 03/11/2026 rule) — never the
+                            // till still stored on such an older row.
+                            ? `Le compte ${decision.row.methodePaiement} du centre « ${decision.row.etablissement} » sera débité immédiatement de ce montant.`
+                            : decision.row.caisse
                             ? `Le compte « ${decision.row.caisse} » sera débité immédiatement de ce montant.`
                             : 'La caisse sera debitee immediatement de ce montant.')
                         : 'Aucun montant ne sera debite. La depense restera visible comme refusee.'

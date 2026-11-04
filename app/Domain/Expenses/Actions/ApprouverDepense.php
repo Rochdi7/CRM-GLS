@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Expenses\Actions;
 
 use App\Domain\Finance\Support\CaisseLedger;
+use App\Domain\Finance\Support\CaisseResolver;
 use App\Domain\Finance\Support\GardeSoldeCaisse;
 use App\Models\Caisse;
 use App\Models\Depense;
@@ -36,6 +37,7 @@ final class ApprouverDepense
     public function __construct(
         private readonly CaisseLedger $ledger,
         private readonly GardeSoldeCaisse $garde,
+        private readonly CaisseResolver $resolver,
     ) {}
 
     public function handle(Depense $depense, Employee $approvedBy): Depense
@@ -60,6 +62,23 @@ final class ApprouverDepense
             $centreId = $locked->centreId()
                 ?? Employee::query()->whereKey($locked->agent_id)->value('etablissement_id');
             $centreId = $centreId === null ? null : (int) $centreId;
+
+            // A PENDING TPE / Virement dépense keyed BEFORE the 03/11/2026
+            // rule still points at the creator's physical till: approving it
+            // would debit the employee's drawer (and bound it by that drawer's
+            // centre share) instead of the centre's account for the method.
+            // Nothing has been debited yet, so re-pointing `caisse_id` here is
+            // safe — same rule as EnregistrerDepense / the pending edit path
+            // (CaisseResolver::forDepense), resolved from the DÉPENSE's centre,
+            // never the approver's context. Journaled by Auditable.
+            if (in_array($locked->methode_paiement, CaisseResolver::METHODES_DEPENSE_COMPTE_CENTRE, true)) {
+                $createur = Employee::query()->find($locked->agent_id) ?? $approvedBy;
+                $compte = $this->resolver->forDepense($createur, $locked->methode_paiement, $centreId);
+
+                if ((int) $compte->id !== (int) $locked->caisse_id) {
+                    $locked->update(['caisse_id' => $compte->id]);
+                }
+            }
 
             // The till that will be debited is the one STORED on the row —
             // never re-derived from the approver's context. Locked FOR

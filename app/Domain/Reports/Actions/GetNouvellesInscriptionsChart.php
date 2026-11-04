@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace App\Domain\Reports\Actions;
 
 use App\Models\Inscription;
+use App\Models\User;
 use App\Services\Context\CurrentContext;
+use App\Support\Access\HiddenAccount;
 use Illuminate\Database\Query\Builder;
+use Illuminate\Database\Query\JoinClause;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -176,37 +179,87 @@ final class GetNouvellesInscriptionsChart
      */
     private function evenements(Carbon $start, Carbon $end, string $unit): Collection
     {
+        $bucket = self::bucketJournalSql($unit);
+
+        return $this->journalInscriptions($start, $end)
+            ->selectRaw("{$bucket} AS bucket,
+                COUNT(*) FILTER (WHERE ".self::serieJournalSql('annulees').') AS annulees,
+                COUNT(*) FILTER (WHERE '.self::serieJournalSql('archivees').') AS archivees,
+                COUNT(*) FILTER (WHERE '.self::serieJournalSql('supprimees').') AS supprimees')
+            ->groupByRaw($bucket)
+            ->get()
+            ->keyBy('bucket');
+    }
+
+    /**
+     * The journal entries the bilan reads (cancellations, archivings,
+     * deletions of an inscription) inside the window, on the active centre.
+     * Shared by the bilan COUNTS and the per-bar LIST (04/11/2026), so a
+     * bar can never list a row it does not count.
+     *
+     * `d` is the deletion entry of the same inscription, if any: the journal
+     * only keeps the DIRTY columns of an update, so once the row is gone its
+     * student / group / centre survive only in that entry's `old` snapshot.
+     */
+    private function journalInscriptions(Carbon $start, Carbon $end): Builder
+    {
         $centreId = $this->context->etablissementId();
-        $bucket = match ($unit) {
-            'hour' => "to_char(a.created_at, 'HH24')",
-            'day' => "to_char(a.created_at, 'YYYY-MM-DD')",
-            default => "to_char(a.created_at, 'YYYY-MM')",
-        };
-        $nouveau = "(a.attribute_changes->'attributes'->>'statut')";
-        $ancien = "(a.attribute_changes->'old'->>'statut')";
-        $transition = fn (string $statut): string => "a.event = 'updated' AND {$nouveau} = ".DB::getPdo()->quote($statut)." AND {$ancien} IS DISTINCT FROM {$nouveau}";
+        $morph = (new Inscription)->getMorphClass();
 
         return DB::table('activity_log as a')
             ->leftJoin('inscriptions as i', 'i.id', '=', 'a.subject_id')
+            ->leftJoin('activity_log as d', fn (JoinClause $j) => $j
+                ->on('d.subject_id', '=', 'a.subject_id')
+                ->where('d.subject_type', '=', $morph)
+                ->where('d.log_name', '=', 'inscription')
+                ->where('d.event', '=', 'deleted'))
             ->where('a.log_name', 'inscription')
-            ->where('a.subject_type', (new Inscription)->getMorphClass())
+            ->where('a.subject_type', $morph)
             ->whereBetween('a.created_at', [$start->copy()->startOfDay(), $end->copy()->endOfDay()])
             ->where(fn (Builder $w) => $w
                 ->where('a.event', 'deleted')
                 ->orWhere(fn (Builder $u) => $u
                     ->where('a.event', 'updated')
-                    ->whereRaw("{$nouveau} IN (?, ?)", [Inscription::STATUT_ANNULEE, Inscription::STATUT_ARCHIVEE])))
+                    ->whereRaw("(a.attribute_changes->'attributes'->>'statut') IN (?, ?)", [Inscription::STATUT_ANNULEE, Inscription::STATUT_ARCHIVEE])))
             ->when($centreId, fn (Builder $q) => $q->whereRaw(
-                "COALESCE(i.etablissement_id::text, a.attribute_changes->'old'->>'etablissement_id') = ?",
+                'COALESCE(i.etablissement_id::text, '.self::snapshotSql('etablissement_id').') = ?',
                 [(string) $centreId],
-            ))
-            ->selectRaw("{$bucket} AS bucket,
-                COUNT(*) FILTER (WHERE {$transition(Inscription::STATUT_ANNULEE)}) AS annulees,
-                COUNT(*) FILTER (WHERE {$transition(Inscription::STATUT_ARCHIVEE)}) AS archivees,
-                COUNT(*) FILTER (WHERE a.event = 'deleted') AS supprimees")
-            ->groupByRaw($bucket)
-            ->get()
-            ->keyBy('bucket');
+            ));
+    }
+
+    /** A column of the inscription as it was when deleted (`d`), else as the entry itself recorded it. */
+    private static function snapshotSql(string $column): string
+    {
+        return "COALESCE(d.attribute_changes->'old'->>'{$column}', a.attribute_changes->'old'->>'{$column}')";
+    }
+
+    /** @param 'hour'|'day'|'month' $unit */
+    private static function bucketJournalSql(string $unit): string
+    {
+        return match ($unit) {
+            'hour' => "to_char(a.created_at, 'HH24')",
+            'day' => "to_char(a.created_at, 'YYYY-MM-DD')",
+            default => "to_char(a.created_at, 'YYYY-MM')",
+        };
+    }
+
+    /**
+     * Which journal entries make one bilan series: a statut TRANSITION into
+     * Annulée / Archivée (new ≠ old), or a deletion.
+     *
+     * @param  'annulees'|'archivees'|'supprimees'  $serie
+     */
+    private static function serieJournalSql(string $serie): string
+    {
+        if ($serie === 'supprimees') {
+            return "a.event = 'deleted'";
+        }
+
+        $statut = $serie === 'annulees' ? Inscription::STATUT_ANNULEE : Inscription::STATUT_ARCHIVEE;
+        $nouveau = "(a.attribute_changes->'attributes'->>'statut')";
+        $ancien = "(a.attribute_changes->'old'->>'statut')";
+
+        return "a.event = 'updated' AND {$nouveau} = ".DB::getPdo()->quote($statut)." AND {$ancien} IS DISTINCT FROM {$nouveau}";
     }
 
     /**
@@ -252,6 +305,9 @@ final class GetNouvellesInscriptionsChart
         return [$start->startOfDay(), $end->startOfDay()];
     }
 
+    /** The bars a click can list — `nouvelles` is the plain chart's bar, the others are the « Bilan » losses. */
+    public const SERIES = ['nouvelles', 'annulees', 'archivees', 'supprimees'];
+
     /** Rows per page of the per-bar student list — a month of Marrakech is 100+ rows. */
     public const STUDENTS_PER_PAGE = 25;
 
@@ -266,7 +322,7 @@ final class GetNouvellesInscriptionsChart
      *
      * @return array{students: list<array{inscriptionId: int, studentId: int, reference: string, nom: string, prenom: string, telephone: ?string, groupe: ?string, centre: ?string, statut: string, dateInscription: string, heure: string}>, total: int, page: int, lastPage: int, perPage: int}
      */
-    public function students(string $duree, string $key, int $page = 1, ?string $debut = null, ?string $fin = null): array
+    public function students(string $duree, string $key, int $page = 1, ?string $debut = null, ?string $fin = null, string $serie = 'nouvelles'): array
     {
         $page = max(1, $page);
         $empty = ['students' => [], 'total' => 0, 'page' => $page, 'lastPage' => 1, 'perPage' => self::STUDENTS_PER_PAGE];
@@ -284,8 +340,12 @@ final class GetNouvellesInscriptionsChart
             'day' => '/^\d{4}-\d{2}-\d{2}$/',
             default => '/^\d{4}-\d{2}$/',
         };
-        if (preg_match($pattern, $key) !== 1) {
+        if (preg_match($pattern, $key) !== 1 || ! in_array($serie, self::SERIES, true)) {
             return $empty;
+        }
+
+        if ($serie !== 'nouvelles') {
+            return $this->evenementsStudents($start, $end, $unit, $key, $serie, $page);
         }
 
         $bar = $this->nouvellesInscriptions($start, $end)
@@ -323,6 +383,77 @@ final class GetNouvellesInscriptionsChart
             ->all();
 
         return ['students' => $students, 'total' => $total, 'page' => $page, 'lastPage' => $lastPage, 'perPage' => self::STUDENTS_PER_PAGE];
+    }
+
+    /**
+     * The inscriptions behind ONE bilan bar (cancelled / archived / deleted
+     * in that bucket, 04/11/2026) — same journal query and the same series
+     * condition as the count. A row is the GESTURE: when, by whom, with the
+     * motif the entry itself recorded (frozen at write time, never the
+     * dossier's current note). A deleted dossier is read from its deletion
+     * snapshot, and its student still links while the student record
+     * survives. `par` is blanked for a hidden account rather than dropping
+     * the row, so the list still matches the bar.
+     *
+     * @param  'hour'|'day'|'month'  $unit
+     * @return array{students: list<array<string, mixed>>, total: int, page: int, lastPage: int, perPage: int}
+     */
+    private function evenementsStudents(Carbon $start, Carbon $end, string $unit, string $key, string $serie, int $page): array
+    {
+        $bar = $this->journalInscriptions($start, $end)
+            ->whereRaw(self::bucketJournalSql($unit).' = ?', [$key])
+            ->whereRaw(self::serieJournalSql($serie));
+
+        $total = (clone $bar)->count();
+        $lastPage = max(1, (int) ceil($total / self::STUDENTS_PER_PAGE));
+
+        $hidden = HiddenAccount::hides() ? HiddenAccount::emails() : [];
+        $motif = match ($serie) {
+            'annulees' => "a.attribute_changes->'attributes'->>'motif_annulation'",
+            'archivees' => "a.attribute_changes->'attributes'->>'archive_motif'",
+            default => 'NULL',
+        };
+
+        $rows = $bar
+            ->leftJoin('students as s', 's.id', '=', DB::raw('COALESCE(i.student_id, ('.self::snapshotSql('student_id').')::bigint)'))
+            ->leftJoin('groups as g', 'g.id', '=', DB::raw('COALESCE(i.group_id, ('.self::snapshotSql('group_id').')::bigint)'))
+            ->leftJoin('etablissements as e', 'e.id', '=', DB::raw('COALESCE(i.etablissement_id, ('.self::snapshotSql('etablissement_id').')::bigint)'))
+            ->leftJoin('users as u', fn (JoinClause $j) => $j
+                ->on('u.id', '=', 'a.causer_id')
+                ->where('a.causer_type', '=', (new User)->getMorphClass()))
+            ->orderBy('a.created_at')
+            ->orderBy('a.id')
+            ->forPage($page, self::STUDENTS_PER_PAGE)
+            ->get([
+                'a.id as activity_id', 'a.created_at as fait_le', 'a.causer_label', 'u.email as causer_email',
+                'i.id as inscription_id', 'i.statut',
+                DB::raw('COALESCE(i.reference, '.self::snapshotSql('reference').') AS reference'),
+                DB::raw('COALESCE(i.date_inscription::text, '.self::snapshotSql('date_inscription').') AS date_inscription'),
+                DB::raw("{$motif} AS motif"),
+                's.id as student_id', 's.nom', 's.prenom', 's.telephone',
+                'g.nom as groupe', 'e.nom_centre as centre',
+            ])
+            ->map(fn (object $r): array => [
+                'rowId' => (int) $r->activity_id,
+                'inscriptionId' => $r->inscription_id !== null ? (int) $r->inscription_id : null,
+                'studentId' => $r->student_id !== null ? (int) $r->student_id : null,
+                'reference' => (string) ($r->reference ?? ''),
+                'nom' => (string) ($r->nom ?? ''),
+                'prenom' => (string) ($r->prenom ?? ''),
+                'telephone' => $r->telephone,
+                'groupe' => $r->groupe,
+                'centre' => $r->centre,
+                // NULL once the dossier is gone — the page reads « Supprimée ».
+                'statut' => $r->statut,
+                'dateInscription' => $r->date_inscription !== null ? Carbon::parse($r->date_inscription)->format('d/m/Y') : '',
+                'heure' => '',
+                'faitLe' => Carbon::parse($r->fait_le)->format('d/m/Y H:i'),
+                'par' => $r->causer_email !== null && in_array($r->causer_email, $hidden, true) ? null : $r->causer_label,
+                'motif' => $r->motif !== null && $r->motif !== '' ? (string) $r->motif : null,
+            ])
+            ->all();
+
+        return ['students' => $rows, 'total' => $total, 'page' => $page, 'lastPage' => $lastPage, 'perPage' => self::STUDENTS_PER_PAGE];
     }
 
     /**

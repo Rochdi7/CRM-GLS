@@ -1,11 +1,14 @@
 import { useState } from 'react';
-import type { NouvellesInscriptionsChartData } from '@/Types';
+import type { MouseEvent } from 'react';
+import type { InscriptionsBarSerie, NouvellesInscriptionsChartData } from '@/Types';
 import { t } from '@/Lib/i18n';
 
 interface InscriptionsBilanChartProps {
     data: NouvellesInscriptionsChartData;
     /** Measured width of the card body (the parent owns the ResizeObserver). */
     width: number;
+    /** Click on a bar: lists the registrations behind that series of that bucket. */
+    onOpenBar?: (index: number, serie: InscriptionsBarSerie) => void;
 }
 
 const HEIGHT = 300;
@@ -15,7 +18,7 @@ const PAD_RIGHT = 12;
 const PAD_TOP = 16;
 const PAD_BOTTOM = 32;
 
-type SerieKey = 'nouvelles' | 'annulees' | 'archivees' | 'supprimees';
+type SerieKey = InscriptionsBarSerie;
 
 /**
  * Bars drawn per bucket, left → right. `up` ones rise from the zero line
@@ -54,7 +57,7 @@ const perte = (v: number): string => (v > 0 ? `−${v.toLocaleString('fr-FR')}` 
  * below a bad one. Every number comes from the server; nothing is re-derived
  * here.
  */
-export default function InscriptionsBilanChart({ data, width }: InscriptionsBilanChartProps) {
+export default function InscriptionsBilanChart({ data, width, onOpenBar }: InscriptionsBilanChartProps) {
     const [hoverIndex, setHoverIndex] = useState<number | null>(null);
     const { bilan } = data;
 
@@ -95,6 +98,18 @@ export default function InscriptionsBilanChart({ data, width }: InscriptionsBila
         const groupWidth = keys.length * barWidth + (keys.length - 1) * BAR_GAP;
 
         return xCenter(i) - groupWidth / 2 + keys.indexOf(key) * (barWidth + BAR_GAP);
+    };
+    // A click lists the bar NEAREST the pointer inside the slot (bars can be
+    // 2px wide on a long window — aiming exactly would be a lottery).
+    const openAt = (i: number, e: MouseEvent<SVGRectElement>) => {
+        const keys = visibles(i);
+        if (!onOpenBar || keys.length === 0) return;
+        const svg = e.currentTarget.ownerSVGElement;
+        const x = svg ? e.clientX - svg.getBoundingClientRect().left : xCenter(i);
+        const nearest = keys.reduce((best, key) =>
+            Math.abs(xBar(i, key) + barWidth / 2 - x) < Math.abs(xBar(i, best) + barWidth / 2 - x) ? key : best,
+        );
+        onOpenBar(i, nearest);
     };
     const labelStep = Math.max(1, Math.ceil(44 / slot));
     const ticks = Array.from({ length: upTicks + downTicks + 1 }, (_, k) => (upTicks - k) * step);
@@ -185,7 +200,9 @@ export default function InscriptionsBilanChart({ data, width }: InscriptionsBila
                         width={slot}
                         height={plotHeight}
                         fill="transparent"
+                        style={{ cursor: onOpenBar && visibles(i).length > 0 ? 'pointer' : 'default' }}
                         onMouseEnter={() => setHoverIndex(i)}
+                        onClick={(e) => openAt(i, e)}
                     />
                 ))}
 
@@ -236,6 +253,9 @@ export default function InscriptionsBilanChart({ data, width }: InscriptionsBila
                         <span className="gls-frais-tooltip-label">{t('Net result')}:</span>
                         <span className="gls-frais-tooltip-value">{signed(bilan.solde[hoverIndex])}</span>
                     </div>
+                    {onOpenBar && visibles(hoverIndex).length > 0 && (
+                        <div className="gls-frais-tooltip-row fs-12 opacity-75">{t('Click a bar to see the registrations')}</div>
+                    )}
                 </div>
             )}
 

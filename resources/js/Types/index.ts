@@ -300,19 +300,31 @@ export interface NouvellesInscriptionsChartData {
     bilan: NouvellesInscriptionsBilan;
 }
 
-/** One student behind a clicked bar (GetNouvellesInscriptionsChart::students). */
+/** Which bar of the chart a click lists — `nouvelles` on both views, the losses on « Bilan » only. */
+export type InscriptionsBarSerie = 'nouvelles' | 'annulees' | 'archivees' | 'supprimees';
+
+/**
+ * One row behind a clicked bar (GetNouvellesInscriptionsChart::students).
+ * For a « Bilan » loss bar (cancelled / archived / deleted) the row is the
+ * journaled GESTURE: `rowId` (journal entry), `faitLe`, `par`, `motif`; a
+ * deleted dossier has no `inscriptionId` and `statut` null.
+ */
 export interface NouvelleInscriptionStudent {
-    inscriptionId: number;
-    studentId: number;
+    rowId?: number;
+    inscriptionId: number | null;
+    studentId: number | null;
     reference: string;
     nom: string;
     prenom: string;
     telephone: string | null;
     groupe: string | null;
     centre: string | null;
-    statut: string;
+    statut: string | null;
     dateInscription: string;
     heure: string;
+    faitLe?: string;
+    par?: string | null;
+    motif?: string | null;
 }
 
 /** One entry of Laravel's paginator ->links() array (as serialized by Inertia). */
@@ -1918,6 +1930,16 @@ export interface InscriptionFormOption {
     label: string;
 }
 
+/**
+ * Student option — a « Transféré » record is LISTED with the reason it cannot
+ * be enrolled here (server text, centre d'arrivée named); the create/edit modal
+ * draws it disabled, the list filter keeps it selectable. GardeEtudiantTransfere
+ * is the real check.
+ */
+export interface InscriptionStudentOption extends InscriptionFormOption {
+    nonInscriptible: string | null;
+}
+
 /** Group option with its statut — « Modification du groupe » only offers groups still « En inscription » (server re-checks in ModifierGroupeInscription). */
 export interface InscriptionGroupOption extends InscriptionFormOption {
     statut: string;
@@ -2061,7 +2083,7 @@ export interface InscriptionsPageProps {
     niveauxAvecDomaine: string[];
     niveauStudium: string;
     defaultCountry: string;
-    students: InscriptionFormOption[];
+    students: InscriptionStudentOption[];
     groups: InscriptionGroupOption[];
     /** Badges des onglets « Archivées » / « Corbeille » (href ⇒ nombre dans la portée). */
     tabCounts?: Record<string, number>;

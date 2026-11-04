@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import type { NouvelleInscriptionStudent, NouvellesInscriptionsChartData, NouvellesInscriptionsDuree } from '@/Types';
+import type {
+    InscriptionsBarSerie,
+    NouvelleInscriptionStudent,
+    NouvellesInscriptionsChartData,
+    NouvellesInscriptionsDuree,
+} from '@/Types';
 import { t } from '@/Lib/i18n';
 import { statutVariant } from '@/Lib/inscriptionStatut';
 import Modal from '@/Components/Modals/Modal';
@@ -20,6 +25,10 @@ interface NouvellesInscriptionsChartProps {
 interface BarDetail {
     /** Index of the clicked bar — kept so a page change re-queries the SAME bucket. */
     bar: number;
+    /** Which series of that bucket is listed (« Bilan » bars: losses too). */
+    serie: InscriptionsBarSerie;
+    /** Opened from the « Bilan » view — the modal then offers the bucket's other series. */
+    fromBilan: boolean;
     label: string;
     loading: boolean;
     /** HTTP status (or 0 for a network failure) — shown so a 404 (stale route cache) reads differently from a 500. */
@@ -41,6 +50,14 @@ interface BarPageResponse {
     lastPage: number;
     perPage: number;
 }
+
+/** Modal title + tab label per listed series, in the Bilan legend's order and colours. */
+const BAR_SERIES: { key: InscriptionsBarSerie; title: string; tab: string; color: string }[] = [
+    { key: 'nouvelles', title: 'New registrations', tab: 'Registrations: new', color: 'var(--gls-bilan-nouvelles)' },
+    { key: 'annulees', title: 'Bilan: cancelled registrations', tab: 'Registrations: cancelled', color: 'var(--gls-bilan-annulee)' },
+    { key: 'archivees', title: 'Bilan: archived registrations', tab: 'Registrations: archived', color: 'var(--gls-bilan-archivee)' },
+    { key: 'supprimees', title: 'Bilan: deleted registrations', tab: 'Registrations: deleted', color: 'var(--gls-bilan-supprimee)' },
+];
 
 const DUREES: { value: NouvellesInscriptionsDuree; label: string }[] = [
     { value: 'jour', label: 'Today' },
@@ -152,25 +169,34 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
     // Ignores a late answer for a bar the user has already moved away from.
     const requestId = useRef(0);
 
-    async function loadBar(i: number, page: number) {
+    /** How many rows a series holds in one bucket — the server's own counts, never re-derived. */
+    const serieCount = (serie: InscriptionsBarSerie, i: number): number =>
+        (serie === 'nouvelles' ? data.counts[i] : data.bilan[serie][i]) ?? 0;
+
+    async function loadBar(i: number, page: number, serie: InscriptionsBarSerie = 'nouvelles', fromBilan = false) {
         const id = ++requestId.current;
-        setDetail((current) => ({
-            bar: i,
-            label: data.labels[i],
-            loading: true,
-            error: null,
-            // Keep the rows on screen while the next page loads (no flash to empty).
-            students: current?.bar === i ? current.students : [],
-            canViewStudents: current?.canViewStudents ?? false,
-            page,
-            lastPage: current?.bar === i ? current.lastPage : 1,
-            total: current?.bar === i ? current.total : 0,
-            perPage: current?.perPage ?? 25,
-        }));
+        setDetail((current) => {
+            const same = current?.bar === i && current.serie === serie;
+            return {
+                bar: i,
+                serie,
+                fromBilan,
+                label: data.labels[i],
+                loading: true,
+                error: null,
+                // Keep the rows on screen while the next page loads (no flash to empty).
+                students: same ? current.students : [],
+                canViewStudents: current?.canViewStudents ?? false,
+                page,
+                lastPage: same ? current.lastPage : 1,
+                total: same ? current.total : 0,
+                perPage: current?.perPage ?? 25,
+            };
+        });
 
         let status = 0;
         try {
-            const params = new URLSearchParams({ duree: data.duree, key: data.keys[i], page: String(page) });
+            const params = new URLSearchParams({ duree: data.duree, key: data.keys[i], page: String(page), serie });
             if (data.duree === 'periode' && data.debut && data.fin) {
                 params.set('debut', data.debut);
                 params.set('fin', data.fin);
@@ -184,6 +210,8 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
             if (id !== requestId.current) return;
             setDetail({
                 bar: i,
+                serie,
+                fromBilan,
                 label: data.labels[i],
                 loading: false,
                 error: null,
@@ -200,10 +228,14 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
         }
     }
 
-    function openBar(i: number) {
-        if (loading || !data.counts[i]) return;
-        void loadBar(i, 1);
+    function openBar(i: number, serie: InscriptionsBarSerie = 'nouvelles', fromBilan = false) {
+        if (loading || serieCount(serie, i) <= 0) return;
+        void loadBar(i, 1, serie, fromBilan);
     }
+
+    const detailSerie = BAR_SERIES.find((s) => s.key === detail?.serie) ?? BAR_SERIES[0];
+    // A loss row is a journaled GESTURE: when, by whom, why.
+    const isGeste = detail !== null && detail.serie !== 'nouvelles';
 
     useEffect(() => {
         const el = containerRef.current;
@@ -314,7 +346,7 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
                             <p className="text-muted fs-13 mb-2">
                                 {t('Gained: new registrations. Lost: cancelled, archived and deleted registrations.')}
                             </p>
-                            <InscriptionsBilanChart data={data} width={WIDTH} />
+                            <InscriptionsBilanChart data={data} width={WIDTH} onOpenBar={(i, serie) => openBar(i, serie, true)} />
                         </>
                     ) : (
                     <>
@@ -432,13 +464,36 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
 
             <Modal
                 show={detail !== null}
-                title={`${t('New registrations')} - ${detail?.label ?? ''}`}
+                title={`${t(detailSerie.title)} - ${detail?.label ?? ''}`}
                 onClose={() => {
                     requestId.current++;
                     setDetail(null);
                 }}
                 size="xl"
             >
+                {detail?.fromBilan && (
+                    <div className="btn-group btn-group-sm flex-wrap mb-3" role="group" aria-label={t('Registrations balance')}>
+                        {BAR_SERIES.map((s) => {
+                            const n = serieCount(s.key, detail.bar);
+                            return (
+                                <button
+                                    key={s.key}
+                                    type="button"
+                                    className={`btn d-inline-flex align-items-center gap-1 ${
+                                        detail.serie === s.key ? 'btn-primary' : 'btn-outline-light text-body'
+                                    }`}
+                                    aria-pressed={detail.serie === s.key}
+                                    disabled={n <= 0}
+                                    onClick={() => detail.serie !== s.key && void loadBar(detail.bar, 1, s.key, true)}
+                                >
+                                    <span className="gls-frais-tooltip-dot" style={{ backgroundColor: s.color }} />
+                                    {t(s.tab)}
+                                    <span className="fw-semibold">{n.toLocaleString('fr-FR')}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
                 {detail?.loading && detail.students.length === 0 && (
                     <div className="text-center py-4">
                         <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" />
@@ -465,16 +520,21 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
                                         <th>{t('Group')}</th>
                                         <th>{t('Centre')}</th>
                                         <th>{t('Registration date')}</th>
+                                        {isGeste && <th>{t('Gesture done on')}</th>}
+                                        {isGeste && <th>{t('Gesture done by')}</th>}
+                                        {isGeste && detail.serie !== 'supprimees' && <th>{t('Reason')}</th>}
                                         <th>{t('Status')}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {detail.students.map((s, idx) => (
-                                        <tr key={s.inscriptionId}>
+                                        <tr key={s.rowId ?? s.inscriptionId ?? idx}>
                                             <td>{(detail.page - 1) * detail.perPage + idx + 1}</td>
-                                            <td className="text-normal-case">{s.reference}</td>
+                                            <td className="text-normal-case">{s.reference || '-'}</td>
                                             <td>
-                                                {detail.canViewStudents ? (
+                                                {s.studentId === null ? (
+                                                    '-'
+                                                ) : detail.canViewStudents ? (
                                                     <a href={`/backoffice/students/${s.studentId}`}>{s.nom} {s.prenom}</a>
                                                 ) : (
                                                     <>{s.nom} {s.prenom}</>
@@ -488,8 +548,18 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
                                                 {s.dateInscription}
                                                 {data.duree === 'jour' && s.heure && <span className="text-muted"> {s.heure}</span>}
                                             </td>
+                                            {isGeste && <td>{s.faitLe ?? '-'}</td>}
+                                            {isGeste && <td>{s.par ?? '-'}</td>}
+                                            {/* A motif is free text as typed — keep its casing. */}
+                                            {isGeste && detail.serie !== 'supprimees' && (
+                                                <td className="text-normal-case">{s.motif ?? '-'}</td>
+                                            )}
                                             <td>
-                                                <span className={`badge badge-soft-${statutVariant(s.statut)}`}>{s.statut}</span>
+                                                {s.statut === null ? (
+                                                    <span className="badge badge-soft-secondary">{t('Registration: deleted')}</span>
+                                                ) : (
+                                                    <span className={`badge badge-soft-${statutVariant(s.statut)}`}>{s.statut}</span>
+                                                )}
                                             </td>
                                         </tr>
                                     ))}
@@ -499,7 +569,7 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
                                 current={detail.page}
                                 last={detail.lastPage}
                                 total={detail.total}
-                                onPage={(page) => void loadBar(detail.bar, page)}
+                                onPage={(page) => void loadBar(detail.bar, page, detail.serie, detail.fromBilan)}
                             />
                         </div>
                     )
