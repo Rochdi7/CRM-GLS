@@ -25,21 +25,16 @@ final class GetInscriptionFormOptions
     ) {}
 
     /**
-     * Une fiche « Transféré » ne s'inscrit plus ici — son dossier vit sur la
-     * copie du centre d'arrivée (25/09/2026, GardeEtudiantTransfere refuse au
-     * serveur). Elle reste pourtant LISTÉE, avec `nonInscriptible` qui nomme
-     * le centre d'arrivée : la retirer faisait croire que l'étudiant n'existait
-     * pas (signalé 04/11/2026, « KHALID EL ASSAL » introuvable dans « Ajouter
-     * une inscription »). Le modal la désactive ; le filtre de la liste la
-     * garde sélectionnable, ses anciens dossiers « Transférée » y sont listés.
+     * Every student of the active centre — a « Transféré » record included.
+     * It stays ENROLLABLE in its own centre (owner's decision, 04/11/2026):
+     * the student may come back and follow a course here. Hiding it made
+     * « KHALID EL ASSAL » unfindable in « Ajouter une inscription ».
      *
-     * @return Collection<int, array{id: int, label: string, nonInscriptible: string|null}>
+     * @return Collection<int, array{id: int, label: string}>
      */
     public function students($user): Collection
     {
         return Student::query()
-            ->with(['transfereVers:id,reference,etablissement_id', 'transfereVers.etablissement:id,nom_centre'])
-            ->orderByRaw('CASE WHEN statut = ? THEN 1 ELSE 0 END', [Student::STATUT_TRANSFERE])
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
             ->tap(function ($q): void {
                 if (! $this->context->isAllCenters()) {
@@ -48,15 +43,7 @@ final class GetInscriptionFormOptions
             })
             ->orderBy('nom')
             ->get()
-            ->map(fn (Student $s): array => [
-                'id' => $s->id,
-                'label' => "{$s->nomComplet()} ({$s->reference})",
-                'nonInscriptible' => $s->estTransfere()
-                    ? __('Transferred to :centre — not enrollable here', [
-                        'centre' => $s->transfereVers?->etablissement?->nom_centre ?? __('another center'),
-                    ])
-                    : null,
-            ]);
+            ->map(fn (Student $s): array => ['id' => $s->id, 'label' => "{$s->nomComplet()} ({$s->reference})"]);
     }
 
     /**

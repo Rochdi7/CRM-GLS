@@ -36,7 +36,6 @@ use App\Models\Encaissement;
 use App\Models\Frais;
 use App\Models\Group;
 use App\Domain\Settings\Support\FraisEcheanceResolver;
-use App\Domain\Students\Support\GardeEtudiantTransfere;
 use App\Models\Inscription;
 use App\Models\InscriptionFee;
 use App\Models\MotifAnnulation;
@@ -652,9 +651,10 @@ final class InscriptionController extends Controller
         if (! $creatingStudent) {
             $student = Student::findOrFail((int) $data['student_id']);
             $this->assertStudentInContext($request, $student);
-            // Une fiche « Transféré » est close ici : son dossier vit sur
-            // la copie du centre d'arrivée (GardeEtudiantTransfere).
-            GardeEtudiantTransfere::assertNonTransfere($student);
+            // Une fiche « Transféré » reste INSCRIPTIBLE dans son centre
+            // (décision du propriétaire, 04/11/2026) : l'étudiant peut revenir
+            // suivre un cours ici. Seules l'avance et une seconde demande de
+            // transfert restent refusées (GardeEtudiantTransfere).
         }
         $this->assertFeeLinesBelongToGroup($group, $data['fee_lines'] ?? []);
         $this->assertMontantsInitiauxInchanges($request, $group, $data['fee_lines'] ?? []);
@@ -884,7 +884,6 @@ final class InscriptionController extends Controller
         $data = $request->validated();
         $student = Student::findOrFail((int) $data['student_id']);
         $this->assertStudentInContext($request, $student);
-        GardeEtudiantTransfere::assertNonTransfere($student);
 
         // Once money has been received on this registration its student is
         // frozen: the payments carry that student_id, and re-pointing the

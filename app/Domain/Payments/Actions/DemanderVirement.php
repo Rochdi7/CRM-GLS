@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Domain\Payments\Actions;
 
 use App\Domain\Shared\Support\ReferenceGenerator;
-use App\Domain\Students\Support\GardeEtudiantTransfere;
 use App\Models\Employee;
 use App\Models\Inscription;
 use App\Models\InscriptionFee;
@@ -61,7 +60,9 @@ final class DemanderVirement
                 ]);
             }
 
-            GardeEtudiantTransfere::assertNonTransfere($inscription->student);
+            // Pas de garde « Transféré » ici : une fiche transférée peut
+            // porter une inscription Active (04/11/2026), et un virement sur
+            // un frais de cette inscription se paie comme en espèces.
 
             /** @var InscriptionFee $fee */
             $fee = InscriptionFee::query()->whereKey((int) $data['fee_id'])->lockForUpdate()->firstOrFail();

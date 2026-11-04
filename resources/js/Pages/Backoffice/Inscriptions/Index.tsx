@@ -646,19 +646,9 @@ export default function InscriptionsIndex({
     // instead of being scheduled, see setEditingLine()'s COMMIT_ON_BLUR note.
     const pendingFeesSave = useRef<InscriptionFeeLine[] | null>(null);
 
-    // List filter: every student, a « Transféré » one included — their old
-    // « Transférée » inscriptions are listed and must stay findable.
+    // Every student of the centre, a « Transféré » one included — it stays
+    // enrollable here (owner's decision, 04/11/2026).
     const studentOptions: SelectOption[] = students.map((s) => ({ value: s.id, label: s.label }));
-    // Create/edit modal: a « Transféré » record is SHOWN but disabled with the
-    // server's reason (never hidden — a missing name reads as « this student
-    // doesn't exist »). The record an edited inscription already points to
-    // stays selectable so its own value still renders.
-    const studentFormOptions: SelectOption[] = students.map((s) => ({
-        value: s.id,
-        label: s.label,
-        disabled: s.nonInscriptible !== null && s.id !== editingInscription?.studentId,
-        disabledReason: s.nonInscriptible ?? undefined,
-    }));
     const groupOptions: SelectOption[] = groups.map((g) => ({ value: g.id, label: g.label }));
     // « Changement de groupe » target list: every reachable group of every
     // academic year, narrowed by the modal's own « Année scolaire » selector
@@ -1926,7 +1916,7 @@ export default function InscriptionsIndex({
                                     id="ins-student"
                                     label="Étudiant"
                                     required
-                                    options={studentFormOptions}
+                                    options={studentOptions}
                                     uppercase
                                     placeholder="Choisir…"
                                     value={form.data.student_id}

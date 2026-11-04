@@ -1930,16 +1930,6 @@ export interface InscriptionFormOption {
     label: string;
 }
 
-/**
- * Student option — a « Transféré » record is LISTED with the reason it cannot
- * be enrolled here (server text, centre d'arrivée named); the create/edit modal
- * draws it disabled, the list filter keeps it selectable. GardeEtudiantTransfere
- * is the real check.
- */
-export interface InscriptionStudentOption extends InscriptionFormOption {
-    nonInscriptible: string | null;
-}
-
 /** Group option with its statut — « Modification du groupe » only offers groups still « En inscription » (server re-checks in ModifierGroupeInscription). */
 export interface InscriptionGroupOption extends InscriptionFormOption {
     statut: string;
@@ -2083,7 +2073,7 @@ export interface InscriptionsPageProps {
     niveauxAvecDomaine: string[];
     niveauStudium: string;
     defaultCountry: string;
-    students: InscriptionStudentOption[];
+    students: InscriptionFormOption[];
     groups: InscriptionGroupOption[];
     /** Badges des onglets « Archivées » / « Corbeille » (href ⇒ nombre dans la portée). */
     tabCounts?: Record<string, number>;

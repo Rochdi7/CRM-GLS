@@ -1610,10 +1610,12 @@ the database layer. Non-negotiable invariants already enforced in code:
   de caisse ordinaire. **Les présences ne sont NI déplacées NI copiées** :
   elles appartiennent aux séances du groupe de départ, les recopier
   doublerait ses statistiques d'absence ; la copie renvoie vers l'original.
-  Une fiche « Transféré » est CLOSE dans son centre :
-  `GardeEtudiantTransfere::assertNonTransfere()` refuse une nouvelle
-  inscription et une avance dessus (et une seconde demande), et le
-  dropdown d'inscription ne la liste plus. Une demande refusée ou annulée
+  Une fiche « Transféré » refuse une AVANCE et une seconde demande
+  (`GardeEtudiantTransfere::assertNonTransfere()`), mais **reste
+  INSCRIPTIBLE dans son centre** (décision du propriétaire, 04/11/2026 —
+  l'étudiant peut revenir y suivre un cours) : le dropdown d'inscription la
+  liste, `InscriptionController@store/@update` et `DemanderVirement` ne la
+  refusent plus, et son statut reste « Transféré ». Une demande refusée ou annulée
   reste lisible (jamais supprimée). Tests :
   `tests/Feature/Backoffice/Students/TransfertEtudiantCentreTest.php`.
 - **⚠ Une inscription « Archivée » est en PAUSE, pas close** (19/10/2026,

@@ -466,11 +466,11 @@ final class TransfertEtudiantCentreTest extends TestCase
     // ---------------------------------------------------------------
 
     /**
-     * La fiche « Transféré » reste LISTÉE dans le dropdown d'inscription
-     * (04/11/2026), mais marquée non inscriptible en nommant le centre
-     * d'arrivée — la masquer faisait croire que l'étudiant n'existait pas.
+     * Une fiche « Transféré » refuse une avance et une seconde demande, mais
+     * reste LISTÉE et INSCRIPTIBLE dans son centre (décision du propriétaire,
+     * 04/11/2026) : l'étudiant peut revenir suivre un cours ici.
      */
-    public function test_a_transferred_record_takes_no_new_money_and_is_listed_as_not_enrollable(): void
+    public function test_a_transferred_record_takes_no_advance_but_can_be_enrolled_again(): void
     {
         $student = $this->etudiant();
         $this->demander($student);
@@ -486,10 +486,25 @@ final class TransfertEtudiantCentreTest extends TestCase
 
         $this->demander($student)->assertSessionHasErrors('student_id');
 
-        $options = app(GetInscriptionFormOptions::class)->students($this->guichet->user->fresh())->keyBy('id');
-        $this->assertTrue($options->has($student->id), 'A transferred record must stay listed, never hidden.');
-        $this->assertNotNull($options[$student->id]['nonInscriptible']);
-        $this->assertStringContainsString('GLS Casablanca', $options[$student->id]['nonInscriptible']);
+        $ids = app(GetInscriptionFormOptions::class)->students($this->guichet->user->fresh())->pluck('id')->all();
+        $this->assertContains($student->id, $ids, 'A transferred record must stay listed in the enrolment dropdown.');
+
+        $this->guichet->user->givePermissionTo(['registrations.view', 'registrations.create']);
+        $avant = Inscription::query()->where('student_id', $student->id)->count();
+
+        $this->actingAs($this->guichet->user->fresh())
+            ->from(route('backoffice.inscriptions.index'))
+            ->post(route('backoffice.inscriptions.store'), [
+                'inscription_mode' => 'existing',
+                'student_id' => $student->id,
+                'group_id' => $this->groupeRabat->id,
+                'date_inscription' => '2026-11-04',
+                'fee_lines' => [],
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame($avant + 1, Inscription::query()->where('student_id', $student->id)->count());
+        $this->assertSame(Student::STATUT_TRANSFERE, $student->fresh()->statut);
     }
 
     /**
